@@ -1,0 +1,18 @@
+{
+  "version": "5.0.0",
+  "source": "OWASP Application Security Verification Standard 5.0 (CC BY-SA 4.0) — curated seed; vendor the full catalog to expand.",
+  "requirements": [
+    {"id":"1.2.4","chapter":"V1","chapter_name":"Encoding and Sanitization","level":1,"cwe":["CWE-89"],"keywords":["sql injection","parameterized queries","prepared statements"],"description":"Database queries use parameterized queries or safe ORM APIs; untrusted input is never concatenated into a query."},
+    {"id":"1.2.5","chapter":"V1","chapter_name":"Encoding and Sanitization","level":1,"cwe":["CWE-78"],"keywords":["os command injection","argument vector","shell"],"description":"OS commands use an argument vector (no shell string interpolation) and inputs are validated/allowlisted."},
+    {"id":"1.2.6","chapter":"V1","chapter_name":"Encoding and Sanitization","level":2,"cwe":["CWE-918"],"keywords":["ssrf","url validation","allowlist"],"description":"Server-side requests to user-influenced URLs enforce an allowlist and block internal/metadata addresses and non-http(s) schemes."},
+    {"id":"1.3.1","chapter":"V1","chapter_name":"Encoding and Sanitization","level":1,"cwe":["CWE-79"],"keywords":["xss","output encoding","contextual escaping"],"description":"Output is contextually encoded/escaped for the sink (HTML, attribute, JS, URL); no raw interpolation into markup."},
+    {"id":"1.5.2","chapter":"V1","chapter_name":"Encoding and Sanitization","level":2,"cwe":["CWE-502"],"keywords":["deserialization","safe loader"],"description":"Serialized objects from untrusted sources are not deserialized with unsafe loaders (pickle/yaml.load/native unserialize)."},
+    {"id":"1.11.2","chapter":"V1","chapter_name":"Business Logic","level":1,"cwe":["CWE-22"],"keywords":["path traversal","canonicalization"],"description":"File paths built from input are canonicalized and confined to an intended base directory."},
+    {"id":"3.1.1","chapter":"V3","chapter_name":"Session Management","level":1,"cwe":["CWE-384"],"keywords":["session fixation","session id"],"description":"A new session identifier is issued on authentication; session IDs are unpredictable and invalidated on logout."},
+    {"id":"3.5.3","chapter":"V3","chapter_name":"Session Management","level":2,"cwe":["CWE-347"],"keywords":["jwt","signature verification","alg confusion"],"description":"JWTs are verified with an allowlisted algorithm and a trusted key; 'none'/algorithm-confusion and unverified decode are rejected."},
+    {"id":"4.1.1","chapter":"V4","chapter_name":"Access Control","level":1,"cwe":["CWE-285"],"keywords":["authorization","idor","object ownership"],"description":"Every request enforces object- and function-level authorization against the authenticated principal; identifiers from the client are never trusted for ownership."},
+    {"id":"6.1.1","chapter":"V6","chapter_name":"Authentication","level":1,"cwe":["CWE-287"],"keywords":["authentication","credential verification"],"description":"Authentication verifies credentials server-side against a trusted store and fails closed on any error."},
+    {"id":"6.2.1","chapter":"V6","chapter_name":"Cryptography","level":1,"cwe":["CWE-327"],"keywords":["approved algorithms","key management"],"description":"Cryptography uses approved algorithms and modes with authenticated encryption; keys come from a managed source, never hardcoded."},
+    {"id":"6.2.3","chapter":"V6","chapter_name":"Cryptography","level":1,"cwe":["CWE-327","CWE-328"],"keywords":["weak hash","md5","sha1","des","ecb"],"description":"Weak or broken primitives (MD5, SHA-1, DES, ECB, unauthenticated CTR) are not used for security purposes."}
+  ]
+}

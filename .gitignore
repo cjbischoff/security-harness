@@ -1,0 +1,42 @@
+# === Scanned targets & third-party clones (NEVER publish — external code + findings) ===
+reference_tools/
+test_repos/
+
+# === Local tool / session state ===
+.claude/
+.code-review-graph/
+.superpowers/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+
+# === Secrets / env (defensive: this harness handles API keys) ===
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+**/kb/prior_context.json
+
+# === Bench seeds derived from real/internal scans (confirmed vulns in private code) ===
+# Kept locally; NEVER published. Add a synthetic/anonymized seed with `git add -f` if needed.
+skills/sec-harness/helpers/bench/corpus_seed/*.json
+
+# === OS / editor ===
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# === Design docs / planning (kept local, not published) ===
+docs/

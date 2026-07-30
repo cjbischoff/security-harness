@@ -1,0 +1,17 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {"driver": {"name": "CodeQL", "rules": [
+        {"id": "go/sql-injection", "properties": {"tags": ["security", "external/cwe/cwe-089"], "security-severity": "8.8"}},
+        {"id": "go/ssrf", "properties": {"tags": ["security", "external/cwe/cwe-918"], "security-severity": "9.1"}}
+      ]}},
+      "results": [
+        {"ruleId": "go/sql-injection", "message": {"text": "User input flows to SQL."},
+         "locations": [{"physicalLocation": {"artifactLocation": {"uri": "internal/db/q.go"}, "region": {"startLine": 42}}}]},
+        {"ruleId": "go/ssrf", "message": {"text": "User input flows to outbound request."},
+         "locations": [{"physicalLocation": {"artifactLocation": {"uri": "internal/http/c.go"}, "region": {"startLine": 17}}}]}
+      ]
+    }
+  ]
+}

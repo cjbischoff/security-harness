@@ -1,0 +1,17 @@
+rules:
+  - id: python-sqli-string-format
+    languages: [python]
+    severity: ERROR
+    message: "Tainted value formatted directly into a SQL string (SQL injection)."
+    metadata:
+      cls: sqli
+    patterns:
+      - pattern: $CUR.execute("..." % ...)
+  - id: python-hardcoded-secret
+    languages: [python]
+    severity: ERROR
+    message: "Hardcoded secret / API key literal."
+    metadata:
+      cls: secrets
+    patterns:
+      - pattern-regex: '(sk_live_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16})'

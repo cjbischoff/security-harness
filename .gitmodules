@@ -1,0 +1,3 @@
+[submodule "skills/sec-harness/helpers/rules/semgrep"]
+	path = skills/sec-harness/helpers/rules/semgrep
+	url = https://github.com/semgrep/semgrep-rules

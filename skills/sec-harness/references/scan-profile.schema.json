@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "sec-harness scan-profile",
+  "type": "object",
+  "required": ["languages", "frameworks", "entrypoints", "runnable", "attack_surface", "sast_plan", "agents_to_spawn", "budget_hint"],
+  "properties": {
+    "languages": {"type": "array", "items": {"type": "string"}},
+    "frameworks": {"type": "array", "items": {"type": "string"}},
+    "entrypoints": {"type": "array", "items": {"type": "string"}},
+    "runnable": {"type": "boolean"},
+    "attack_surface": {"type": "array", "items": {"type": "string"}},
+    "sast_plan": {"type": "object"},
+    "agents_to_spawn": {"type": "array", "items": {"type": "string"}},
+    "budget_hint": {"type": "object"},
+    "notes": {"type": "object", "description": "Optional free-form signals (e.g. {\"eol_frameworks\": [...]}); never required."}
+  }
+}

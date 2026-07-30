@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sec-harness fix disposition (F11)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["completeness_tier", "status"],
+  "properties": {
+    "completeness_tier": {"enum": ["FULL", "MITIGATION", "WORKAROUND"]},
+    "status": {"enum": ["VERIFIED_FULL","VERIFIED_MITIGATION","VERIFIED_WORKAROUND","ALREADY_FIXED","CANNOT_AUTO_FIX","NEEDS_MANUAL_REVIEW","BREAKING_CHANGE","FAILED"]},
+    "gates": {"type": "object"},
+    "evidence": {"type": "array"},
+    "residual_vectors": {"type": "array", "items": {"type": "string"}},
+    "discrimination_evidence": {"type": "object", "properties": {"pre": {"type": "string"}, "post": {"type": "string"}}},
+    "sweep_revised": {"type": "boolean"},
+    "rationale": {"type": "string"}
+  }
+}

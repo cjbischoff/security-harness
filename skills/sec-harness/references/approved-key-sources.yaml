@@ -1,0 +1,13 @@
+# Approved key sources (F13).
+approved:
+  - kms
+  - vault
+  - chamber
+  - gcp-secret-manager
+  - azure-keyvault
+  - env
+denied:
+  - literal
+  - hardcoded
+  - filesystem
+  - source

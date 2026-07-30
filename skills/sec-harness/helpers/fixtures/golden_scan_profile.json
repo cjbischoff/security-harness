@@ -1,0 +1,15 @@
+{
+  "languages": ["python"],
+  "frameworks": ["flask"],
+  "entrypoints": ["fixtures/vulnerable_repo/app.py:get_user"],
+  "runnable": false,
+  "attack_surface": ["sqli", "secrets"],
+  "sast_plan": {
+    "semgrep": {"run": true, "rulesets": ["skills/sec-harness/helpers/rules/smoke.yaml"]},
+    "codeql": {"run": false, "reason": "single-file fixture; deep taint not justified"},
+    "sca": {"run": true, "lockfiles": ["requirements.txt"]},
+    "secrets": {"run": true}
+  },
+  "agents_to_spawn": ["sqli", "secrets"],
+  "budget_hint": {"max_candidates": 50, "max_investigate_agents": 4}
+}

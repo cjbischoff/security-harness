@@ -1,0 +1,18 @@
+{
+  "id": "F-0002",
+  "rule_id": "python-sqli-string-format",
+  "cls": "sqli",
+  "status": "raw",
+  "severity": "high",
+  "file": "app.py",
+  "line": 18,
+  "message": "Tainted request.args['id'] flows into a string-formatted SQL query.",
+  "dataflow": ["request.args.get('id') @ app.py:15", "-> cur.execute(\"... '%s'\" % uid) @ app.py:18"],
+  "evidence": "cur.execute(\"SELECT * FROM users WHERE id = '%s'\" % uid)",
+  "risk_score": null,
+  "verification": null,
+  "patch_diff": null,
+  "discovery_sha": "testsha",
+  "duplicate_of": null,
+  "history": [{"pass": 1, "event": "investigated:confirmed"}]
+}

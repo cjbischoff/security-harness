@@ -1,0 +1,9 @@
+--- a/app.py
++++ b/app.py
+@@ -15,5 +15,5 @@ def get_user():
+     uid = request.args.get("id", "")
+     conn = sqlite3.connect("app.db")
+     cur = conn.cursor()
+-    cur.execute("SELECT * FROM users WHERE id = '%s'" % uid)  # SQL injection (seeded vuln)
++    cur.execute("SELECT * FROM users WHERE id = ?", (uid,))  # parameterized (fixed)
+     return {"rows": cur.fetchall(), "key_prefix": API_KEY[:3]}
