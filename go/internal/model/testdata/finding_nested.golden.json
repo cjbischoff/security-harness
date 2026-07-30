@@ -1,0 +1,77 @@
+{
+  "id": "F-0200",
+  "rule_id": "r2",
+  "cls": "ssrf",
+  "status": "confirmed",
+  "severity": "high",
+  "file": "fetch.py",
+  "line": 42,
+  "message": "server-side request to attacker-controlled host",
+  "dataflow": [],
+  "risk_score": null,
+  "verification": null,
+  "patch_diff": null,
+  "discovery_sha": null,
+  "duplicate_of": null,
+  "history": [
+    {
+      "pass": 1,
+      "event": "investigated:confirmed"
+    },
+    {
+      "event": "verify:fixed"
+    },
+    {
+      "event": "salvaged",
+      "reason": "agent crashed"
+    },
+    {
+      "event": "factcheck:corrected",
+      "field": "severity",
+      "value": "medium"
+    },
+    {
+      "event": "calibrate:severity-inflated",
+      "claimed": "high",
+      "derived": 6,
+      "delta": 2
+    },
+    {
+      "event": "context:control-verification",
+      "verify_status": "not-enforced",
+      "source_doc": "SECURITY.md"
+    }
+  ],
+  "fingerprint": null,
+  "priority": null,
+  "cvss_vector": null,
+  "evidence": "",
+  "evidence_sources": [],
+  "asvs_ids": [],
+  "codeguard_ids": [],
+  "completeness_tier": null,
+  "runtime_disposition": "needs-runtime",
+  "runtime_test": {
+    "objective": "prove outbound fetch reaches an internal host",
+    "preconditions": [
+      "authenticated"
+    ],
+    "payloads": [
+      "http://169.254.169.254/latest/meta-data/"
+    ],
+    "expected_signal": "metadata response body echoed",
+    "telemetry": "egress log to 169.254.169.254"
+  },
+  "preconditions": [
+    "network egress allowed"
+  ],
+  "reachability": {
+    "reachable": true,
+    "blocker": null,
+    "chain": [
+      "fetch.py:40",
+      "fetch.py:42"
+    ]
+  },
+  "judge_verdict": null
+}

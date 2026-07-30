@@ -1,0 +1,11 @@
+{
+  "pass_number": 1,
+  "active_sha": "deadbeef",
+  "stages": {
+    "recon": "done",
+    "architecture": "done",
+    "threat-model": "done",
+    "prefilter": "done"
+  },
+  "budget": {}
+}

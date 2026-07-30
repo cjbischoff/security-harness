@@ -1,0 +1,47 @@
+{
+  "id": "F-0100",
+  "rule_id": "python-sqli-string-format",
+  "cls": "sqli",
+  "status": "confirmed",
+  "severity": "critical",
+  "file": "app.py",
+  "line": 18,
+  "message": "tainted id flows into SQL where a < b && c > d \u2014 caf\u00e9",
+  "dataflow": [
+    "request.args.get('id') @ app.py:15",
+    "-> cur.execute(...) @ app.py:18"
+  ],
+  "risk_score": 8,
+  "verification": "verified-static",
+  "patch_diff": "--- a/app.py\n+++ b/app.py\n",
+  "discovery_sha": "abc123",
+  "duplicate_of": "F-0000",
+  "history": [
+    {
+      "pass": 1,
+      "event": "investigated:confirmed"
+    }
+  ],
+  "fingerprint": "afbc8b946dbd",
+  "priority": "P1",
+  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+  "evidence": "cur.execute(\"SELECT * FROM users WHERE id = '%s'\" % uid) <&>",
+  "evidence_sources": [
+    "semgrep:python.sqli",
+    "llm-claimed:reachable"
+  ],
+  "asvs_ids": [
+    "V5.3.4"
+  ],
+  "codeguard_ids": [
+    "CG-SQLI-001"
+  ],
+  "completeness_tier": "FULL",
+  "runtime_disposition": "static-settled",
+  "runtime_test": null,
+  "preconditions": [
+    "authenticated session"
+  ],
+  "reachability": null,
+  "judge_verdict": "uphold"
+}
