@@ -9,9 +9,12 @@ in a mechanical tool receipt.
 
 These hold everywhere and are enforced (in code where possible, prompt otherwise):
 
-- **Never executes the target.** Static analysis only; patches apply to a throwaway copy.
-- **Never writes into the target.** Per-repo memory lives in a home dir keyed by repo
-  identity (`~/.sec-harness/<slug>/`, override `$SEC_HARNESS_HOME`).
+- **Never executes or modifies the reviewed source.** Static analysis only; patches
+  apply to a throwaway copy — the repo's own source files are never run or edited.
+- **Writes only its own sidecar.** Scan artifacts live in an in-repo, self-ignoring
+  `<target>/.sec-harness/<slug>/` dir (override the base with `$SEC_HARNESS_HOME`, or
+  the whole workspace with `--workspace`). A seeded `.sec-harness/.gitignore` keeps that
+  output out of the repo's git tree.
 - **Tool-receipt gate.** A finding can only reach `confirmed` with ≥1 mechanical receipt
   (`semgrep`/`codeql`/`ast-grep`/`ripgrep`/`structural-index`/`secrets`/`sca`). LLM
   reasoning alone (`llm-claimed:*`) can corroborate but never confirm. Enforced in
@@ -77,9 +80,11 @@ Deterministic steps run via `uv run python -m sec_harness.<module>` from `helper
 
 ## Per-repo memory & resume
 
-Every scan persists to `~/.sec-harness/<slug>/` (or `$SEC_HARNESS_HOME`): the KB,
-`findings/`, `state.json`, a human `MEMORY.md` index, dated `learnings/`, and reports.
-It survives across runs, so an interrupted campaign resumes at the next phase.
+Every scan persists to an in-repo `<target>/.sec-harness/<slug>/` (override the base
+with `$SEC_HARNESS_HOME`, or the workspace with `--workspace`): the KB, `findings/`,
+`state.json`, a human `MEMORY.md` index, dated `learnings/`, and reports. The sidecar
+is self-ignoring (seeded `.sec-harness/.gitignore`). It survives across runs, so an
+interrupted campaign resumes at the next phase.
 
 ```bash
 python -m sec_harness.cli scan   --target <repo> --config rules/semgrep/<lang>   # defaults workspace to memory

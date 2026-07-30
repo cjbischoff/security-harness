@@ -10,8 +10,34 @@ from sec_harness.state import begin_pass
 def test_memory_root_env_override(monkeypatch, tmp_path):
     monkeypatch.setenv("SEC_HARNESS_HOME", str(tmp_path / "mem"))
     assert memory_root() == tmp_path / "mem"
+    # env override wins even when a target is given
+    assert memory_root(tmp_path / "repo") == tmp_path / "mem"
     monkeypatch.delenv("SEC_HARNESS_HOME")
     assert memory_root().name == ".sec-harness"
+
+
+def test_memory_root_defaults_in_repo(monkeypatch, tmp_path):
+    monkeypatch.delenv("SEC_HARNESS_HOME", raising=False)
+    # default (no env) with a target → in-repo <target>/.sec-harness sidecar
+    assert memory_root(tmp_path) == tmp_path.resolve() / ".sec-harness"
+    # for_target roots the campaign at <target>/.sec-harness/<slug>/
+    m = RepoMemory.for_target(tmp_path, runner=lambda *a, **k: type(
+        "R", (), {"returncode": 128, "stdout": "", "stderr": ""})())
+    assert m.root.parent == tmp_path.resolve() / ".sec-harness"
+    assert m.root.name.startswith(tmp_path.name.lower())
+
+
+def test_ensure_seeds_self_ignoring_gitignore(tmp_path):
+    repo = tmp_path / "repo"; repo.mkdir()
+    m = RepoMemory.for_target(repo, runner=lambda *a, **k: type(
+        "R", (), {"returncode": 128, "stdout": "", "stderr": ""})())
+    m.ensure(target=str(repo))
+    ignore = repo / ".sec-harness" / ".gitignore"
+    assert ignore.exists() and ignore.read_text().strip().endswith("*")
+    # idempotent: an existing .gitignore is never clobbered
+    ignore.write_text("custom\n")
+    m.ensure(target=str(repo))
+    assert ignore.read_text() == "custom\n"
 
 
 def test_repo_slug_prefers_remote_and_is_stable(tmp_path):

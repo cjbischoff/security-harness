@@ -415,10 +415,13 @@ narrative. The NEXT scan's C1 reads this as higher-trust prior context (still dr
 
 ## Per-repo memory (default workspace)
 
-Each scanned repo has a durable memory folder — default `~/.sec-harness/<repo-slug>/`
-(override with `$SEC_HARNESS_HOME`; the CLI's `--workspace` overrides entirely). The
-harness never writes into the target (read-only invariant), so memory lives in a home
-dir keyed by repo identity (git `origin` URL if present, else path) + a short hash.
+Each scanned repo has a durable memory folder — default `<target>/.sec-harness/<repo-slug>/`,
+an in-repo sidecar next to the reviewed code (override the base with `$SEC_HARNESS_HOME`;
+the CLI's `--workspace` overrides entirely). The read-only invariant is about the reviewed
+SOURCE — the harness never executes or modifies it — NOT about the folder: its own artifacts
+live in this `.sec-harness/` sidecar, which is self-ignoring (a seeded `.sec-harness/.gitignore`
+keeps scan output out of the repo's git tree). The `<repo-slug>` is keyed by repo identity
+(git `origin` URL if present, else path) + a short hash.
 
 The folder IS the campaign workspace and persists across invocations:
 - `kb/` — recon `scan-profile.json`, `architecture.md`, `entities/`, `THREAT_MODEL.md`
