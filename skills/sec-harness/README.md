@@ -127,10 +127,12 @@ python -m bench.run --corpus bench/corpus_seed --run-dir /tmp/bench --workspaces
 - Two-tier attack-class catalog: universal + target-conditional `hunting/` domains
   (web-protocol/auth, client-side, AI-agent, business-logic, memory-native) + a 12-heuristic
   methodology and an anti-patterns checklist.
-- Redactor + `verify_no_secrets` pre-send gate (no secret ever reaches an LLM prompt).
+- Redactor + `verify_no_secrets` helpers for masking secrets before they reach a prompt, and an
+  untrusted-content envelope (`wrap_untrusted`: nonce + marker-neutralization + attribution
+  banner). **Note:** these are helpers the agent prompts instruct agents to use — enforcement is
+  prompt-level, not a code-path gate; wire them into your driver if you need a hard guarantee.
 - Fix disposition (FULL/MITIGATION/WORKAROUND, cross-field-honest) + a fail-closed gate
   orchestrator + machine-checked crypto policy.
-- Untrusted-content envelope (nonce + marker-neutralization + attribution banner).
 
 ## Develop
 

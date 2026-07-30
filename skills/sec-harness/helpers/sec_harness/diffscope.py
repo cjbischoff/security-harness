@@ -17,7 +17,8 @@ def changed_files(base: str, head: str = "HEAD", *, runner=subprocess.run) -> li
         Repo-relative changed file paths.
     """
     completed = runner(
-        ["git", "diff", "--name-only", base, head], capture_output=True, text=True, check=False
+        # `--` separates revisions from paths so a ref that looks like a path can't be misparsed.
+        ["git", "diff", "--name-only", base, head, "--"], capture_output=True, text=True, check=False
     )
     return [line for line in completed.stdout.splitlines() if line.strip()]
 
