@@ -40,3 +40,6 @@ Thumbs.db
 
 # === Design docs / planning (kept local, not published) ===
 docs/
+
+# === GSD planning (kept local, not published) ===
+.planning/
