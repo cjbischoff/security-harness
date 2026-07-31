@@ -62,8 +62,9 @@ def main(argv: list[str] | None = None) -> int:
     scan = sub.add_parser("scan", help="Run the deterministic scan pipeline.")
     scan.add_argument("--target", required=True)
     scan.add_argument("--workspace", default=None,
-                      help="Override the workspace; default is the per-repo memory "
-                           "folder (~/.sec-harness/<slug>/ or $SEC_HARNESS_HOME).")
+                      help="Override the workspace; default is the in-repo per-repo "
+                           "memory folder (<target>/.sec-harness/<slug>/, or "
+                           "$SEC_HARNESS_HOME/<slug>/ if set).")
     scan.add_argument("--config", required=True)
     scan.add_argument("--sha", default=None)
     scan.add_argument("--reports-dir", default=None)

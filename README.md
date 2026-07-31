@@ -25,9 +25,10 @@ driven only by an Anthropic API key is the planned rewrite and will live in this
 
 ## Invariants
 
-- **Never executes the target.** Static analysis only; patches apply to a throwaway copy.
-- **Never writes into the target.** Per-repo memory lives in `~/.sec-harness/<slug>/`
-  (override `$SEC_HARNESS_HOME`).
+- **Never executes or modifies the reviewed source.** Static analysis only; patches apply
+  to a throwaway copy — the repo's own source files are never run or edited.
+- **Writes only its own sidecar.** Artifacts live in an in-repo, self-ignoring
+  `<target>/.sec-harness/<slug>/` (override base `$SEC_HARNESS_HOME`, workspace `--workspace`).
 - **Tool-receipt gate.** Only `semgrep`/`codeql`/`ast-grep`/`ripgrep`/`structural-index`/`secrets`/
   `sca` receipts can confirm a finding.
 - **Untrusted repo content is data, not instructions.**

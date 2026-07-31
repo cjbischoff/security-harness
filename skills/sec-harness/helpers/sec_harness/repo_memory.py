@@ -1,9 +1,11 @@
 """Per-repo persistent scan memory.
 
-Every scanned repo gets a durable memory folder (default ``~/.sec-harness/<slug>/``,
-override with ``$SEC_HARNESS_HOME``) that OUTLIVES a single run — the harness never
-writes into the target repo (read-only invariant), so memory lives in a home dir keyed
-by repo identity. The folder holds:
+Every scanned repo gets a durable memory folder that OUTLIVES a single run. By
+default it lives INSIDE the reviewed codebase at ``<target>/.sec-harness/<slug>/``
+(override the base with ``$SEC_HARNESS_HOME`` for an external location, or the whole
+workspace with ``--workspace``). The harness never executes or modifies the reviewed
+SOURCE — its own artifacts live in this self-ignoring ``.sec-harness/`` sidecar dir,
+which is git-ignored so scan output never pollutes the repo's tree. The folder holds:
 
 - the campaign ``Workspace`` (``kb/`` — recon/architecture/THREAT_MODEL; ``findings/``;
   ``state.json``) so passes resume across invocations;
@@ -38,14 +40,28 @@ PHASES: tuple[str, ...] = (
 _SLUG_RE = re.compile(r"[^a-z0-9._-]+")
 
 
-def memory_root() -> Path:
-    """Return the base directory holding all per-repo memory folders.
+def memory_root(target: str | Path | None = None) -> Path:
+    """Return the base directory holding a repo's ``<slug>`` memory folder.
+
+    Resolution precedence:
+        1. ``$SEC_HARNESS_HOME`` if set — an explicit external base.
+        2. ``<target>/.sec-harness`` when ``target`` is given — the default, an
+           in-repo sidecar next to the reviewed code.
+        3. ``~/.sec-harness`` as a last resort when no target is known.
+
+    Args:
+        target: Path to the reviewed repo. When given (and no env override), the
+            base is the in-repo ``.sec-harness`` sidecar.
 
     Returns:
-        ``$SEC_HARNESS_HOME`` if set, else ``~/.sec-harness``.
+        The base directory that will hold ``<slug>/``.
     """
     env = os.environ.get("SEC_HARNESS_HOME")
-    return Path(env).expanduser() if env else Path.home() / ".sec-harness"
+    if env:
+        return Path(env).expanduser()
+    if target is not None:
+        return Path(target).expanduser().resolve() / ".sec-harness"
+    return Path.home() / ".sec-harness"
 
 
 def repo_slug(target: str | Path, *, runner=subprocess.run) -> str:
@@ -99,7 +115,7 @@ class RepoMemory:
         Returns:
             A :class:`RepoMemory` for ``<base>/<slug>``.
         """
-        b = base or memory_root()
+        b = base or memory_root(target)
         return cls(root=b / repo_slug(target, runner=runner))
 
     @property
@@ -126,6 +142,13 @@ class RepoMemory:
         self.workspace.ensure()
         self.learnings_dir.mkdir(parents=True, exist_ok=True)
         (self.root / "runs").mkdir(parents=True, exist_ok=True)
+        # Make the .sec-harness sidecar self-ignoring so in-repo scan output never
+        # pollutes the reviewed repo's git tree. Only seeded if absent — never clobbers
+        # an existing one. root is <base>/<slug>; the sidecar base is root.parent.
+        sidecar_ignore = self.root.parent / ".gitignore"
+        if not sidecar_ignore.exists():
+            sidecar_ignore.parent.mkdir(parents=True, exist_ok=True)
+            sidecar_ignore.write_text("# sec-harness scan artifacts — not source\n*\n")
         if not self.index_path.exists():
             hdr = [
                 f"# sec-harness memory — {self.root.name}",
