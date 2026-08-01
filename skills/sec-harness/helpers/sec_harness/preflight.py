@@ -76,6 +76,45 @@ def semgrep_rules_present(rules_dir: str | Path) -> bool:
     return any(base.rglob("*.yaml")) or any(base.rglob("*.yml"))
 
 
+# Canonical CodeQL query packs — one per language the harness can drive. A pack
+# not published for the installed CodeQL version fails only that pack's download,
+# never the others (see the download loop in the CLI caller).
+CODEQL_QUERY_LANGS = [
+    "actions", "cpp", "csharp", "go", "java", "javascript",
+    "python", "ruby", "rust", "swift",
+]
+
+
+def codeql_pack_download_cmd(langs: list[str]) -> str:
+    """Return the exact ``codeql pack download`` command for the given languages.
+
+    Args:
+        langs: Language ids (e.g. ``["go", "python"]``).
+
+    Returns:
+        A single shell command downloading ``codeql/<lang>-queries`` for each.
+
+    Example:
+        >>> codeql_pack_download_cmd(["go"])
+        'codeql pack download codeql/go-queries'
+    """
+    return "codeql pack download " + " ".join(f"codeql/{lang}-queries" for lang in langs)
+
+
+def missing_codeql_packs(installed: list[str], *, all_langs: list[str] | None = None) -> list[str]:
+    """Return canonical query-pack languages not present in ``installed``.
+
+    Args:
+        installed: Language ids whose pack is already downloaded.
+        all_langs: Canonical set to check against; defaults to ``CODEQL_QUERY_LANGS``.
+
+    Returns:
+        The missing language ids, in canonical order.
+    """
+    langs = all_langs if all_langs is not None else CODEQL_QUERY_LANGS
+    return [lang for lang in langs if lang not in installed]
+
+
 def installed_codeql_langs(*, packages_dir: Path | None = None) -> list[str]:
     """List CodeQL languages whose query pack is downloaded.
 
@@ -143,9 +182,11 @@ def main(argv: list[str] | None = None) -> int:
             langs = installed_codeql_langs()
             listed = ", ".join(langs) if langs else "NONE"
             print(f"       codeql query packs installed: {listed}")
-            if not langs:
-                print("       (no per-language packs — codeql will fail at scan time; "
-                      "download packs for the languages you scan)")
+            missing_packs = missing_codeql_packs(langs)
+            if missing_packs:
+                print("       missing packs — codeql loses dataflow for these languages "
+                      "at scan time. Download them with:")
+                print(f"         {codeql_pack_download_cmd(missing_packs)}")
     print(f"  [{'OK' if rep['semgrep_rules'] else 'MISSING'}] vendored semgrep rules")
     if rep["commands"]:
         print("\nRun these to complete setup (nothing is installed automatically):")

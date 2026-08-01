@@ -53,3 +53,19 @@ def test_installed_codeql_langs(tmp_path):
     (ns / "python-queries").mkdir(parents=True)
     (ns / "not-a-pack").mkdir(parents=True)
     assert installed_codeql_langs(packages_dir=tmp_path) == ["javascript", "python"]
+
+
+def test_codeql_pack_download_cmd():
+    from sec_harness.preflight import codeql_pack_download_cmd
+    cmd = codeql_pack_download_cmd(["go", "python"])
+    assert cmd == "codeql pack download codeql/go-queries codeql/python-queries"
+
+
+def test_missing_codeql_packs():
+    from sec_harness.preflight import CODEQL_QUERY_LANGS, missing_codeql_packs
+    # nothing installed -> every canonical pack is missing
+    assert missing_codeql_packs([]) == CODEQL_QUERY_LANGS
+    # some installed -> only the rest are missing, order preserved
+    rest = missing_codeql_packs(["python", "go"])
+    assert "python" not in rest and "go" not in rest
+    assert rest == [lang for lang in CODEQL_QUERY_LANGS if lang not in ("python", "go")]
