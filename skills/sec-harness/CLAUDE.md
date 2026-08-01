@@ -69,28 +69,28 @@ at all while the conversion is in flight.
 
 ---
 
-## 2. Known-broken state (fix or route around before a full run)
+## 2. Environment prerequisites for a full run
 
-Verified 2026-07-31: **`helpers/sec_harness/secrets.py` is missing** (never committed). Two modules
-import from it and fail at import time:
+`helpers/sec_harness/secrets.py` was **reconstructed 2026-07-31** (TDD; it had been missing, which
+broke `redactor` and `prefilter` at import). The secrets backend + secret-masking helper now work and
+`uv run pytest` collects cleanly. Note `envelope.py:12`'s `import secrets` is the **stdlib** module,
+unrelated to this file.
 
-- `redactor.py:16` → `from sec_harness.secrets import _PATTERNS, _PLACEHOLDER`
-- `prefilter.py:18` → `from sec_harness.secrets import scan_secrets`
+Before a *full* audit, satisfy these environment prerequisites (a clean checkout lacks them):
 
-Consequences:
-- `uv run pytest` fails collection on **3 files** (`test_prefilter.py`, `test_redactor.py`,
-  `test_wiring.py`); 253 tests otherwise collect.
-- The **secrets SAST backend** and the **`redactor` secret-masking safety helper** are non-functional.
-- **The basic `cli scan` path still works** — `cli.py`'s `run_scan` calls `run_semgrep` + `normalize`
-  directly and does *not* import `prefilter`/`redactor`. The fuller profile-driven `run_prefilter`
-  (which merges semgrep + codeql + osv + secrets) is what's broken.
+- **Semgrep rules submodule** — `rules/semgrep/` must be checked out:
+  `git submodule update --init --recursive`. Without it, semgrep has no rules and
+  `test_preflight.py::test_report_finds_vendored_rules...` fails.
+- **External tool binaries** — `uv run python -m sec_harness.preflight` must show `semgrep`,
+  `codeql` (+ per-language query packs), `ast-grep`, `osv-scanner`. Missing backends are skipped and
+  logged, but a missing CodeQL pack silently drops that language's dataflow (see §3 hard rules).
+- **Bench corpus is local-only** — `bench/corpus_seed/*.json` is gitignored (confirmed vulns in
+  private code). Its absence fails `test_bench.py::test_seed_corpus_is_valid` and
+  `test_citations.py::test_all_mapped_ids_exist_in_seed`; both are **dev/bench** tests, not part of an
+  audit. Seed locally to run the bench (§7).
 
-`envelope.py:12`'s `import secrets` is the **stdlib** module — unrelated, not the missing file.
-
-To restore full function, reconstruct `secrets.py` from its two call sites: `_PATTERNS`
-(`list[tuple[str, re.Pattern]]`), `_PLACEHOLDER` (`re.Pattern`), and `scan_secrets(...)` returning
-objects with a `.line` attribute (see `redactor.redact()` usage). Do this test-first (there are
-already tests expecting it). This is a **skill-side** fix and is in scope for you.
+These three failing tests are **environmental** (missing submodule / gitignored seed data), not code
+defects — do not "fix" them by committing the submodule contents or fabricating seed data.
 
 ---
 
@@ -269,7 +269,7 @@ Under `references/`. Agents load these by target type; know when each applies:
 From `skills/sec-harness/helpers/`:
 
 ```bash
-uv run pytest -q                                   # full suite (currently 3 collection errors — §2)
+uv run pytest -q                                   # full suite (3 env-only failures — see §2)
 uv run pytest tests/test_fingerprint.py -q         # single file
 uv run pytest tests/test_x.py::test_name           # single test
 uv run ruff check sec_harness/ bench/ tests/       # lint (line-length 100)
