@@ -99,3 +99,37 @@ def test_is_unresolvable():
     assert g.is_unresolvable(graph, "a")
     assert not g.is_unresolvable(graph, "b")
     assert not g.is_unresolvable(graph, "missing")
+
+
+def _taint_graph(taint_langs, edges):
+    nodes = [
+        g.Node("src", "source", "a.py", 1, "src", {"lang": "py"}),
+        g.Node("sink", "sink", "b.py", 1, "sink", {"lang": "py"}),
+    ]
+    return g.Graph(2, "s", ["tier-1", "tier-2"], taint_langs, nodes, edges, [])
+
+
+def test_no_path_unprovable_without_taint_coverage():
+    # Tier-1 only: python not in taint_langs -> cannot mint a receipt
+    graph = _taint_graph([], [])
+    result = g.no_path(graph, "src", "sink")
+    assert result.provable is False
+    assert result.receipt is None
+
+
+def test_no_path_provable_and_clean_under_coverage():
+    # taint ran for py, and there is no taint edge src->sink -> receipt minted
+    graph = _taint_graph(["py"], [])
+    result = g.no_path(graph, "src", "sink")
+    assert result.answer is True
+    assert result.provable is True
+    assert result.receipt == g.NO_PATH_RECEIPT
+
+
+def test_no_path_finds_taint_path_under_coverage():
+    # taint ran for py and a taint edge connects src->sink -> path exists, no receipt
+    graph = _taint_graph(["py"], [g.Edge("src", "sink", "taint")])
+    result = g.no_path(graph, "src", "sink")
+    assert result.answer is False
+    assert result.provable is True
+    assert result.receipt is None

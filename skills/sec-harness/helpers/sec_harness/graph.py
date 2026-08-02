@@ -280,3 +280,45 @@ def is_unresolvable(graph: Graph, node_id: str) -> bool:
     """True if ``node_id`` is flagged dynamic/reflective/config-wired (route to runtime)."""
     n = graph.node(node_id)
     return bool(n and n.attrs.get("unresolvable", False))
+
+
+@dataclass
+class NoPathResult:
+    """Result of a :func:`no_path` disproof query.
+
+    Attributes:
+        answer: True if no taint path connects source to sink.
+        provable: True only when Tier-2 taint coverage exists for the sink's language.
+        receipt: ``NO_PATH_RECEIPT`` when ``answer and provable``, else ``None``.
+    """
+
+    answer: bool
+    provable: bool
+    receipt: str | None
+
+
+def no_path(graph: Graph, source: str, sink: str, *, max_depth: int = 12) -> NoPathResult:
+    """Disprove a source->sink flow with a receipt, honestly gated on taint coverage.
+
+    Traverses taint edges only. A ``NO_PATH_RECEIPT`` is minted ONLY when the sink's
+    language has Tier-2 taint coverage (``graph.taint_langs``) and no taint path is
+    found — because CodeQL/semgrep taint models the language's dataflow, its silence is
+    meaningful, whereas absent Tier-1 heuristic edges prove nothing.
+
+    Args:
+        graph: The substrate (should be version 2 for a provable result).
+        source: External-input source node id.
+        sink: Sink node id.
+        max_depth: Maximum taint-edge hops to traverse.
+
+    Returns:
+        A :class:`NoPathResult`; ``receipt`` is set only under the honesty gate.
+    """
+    sink_node = graph.node(sink)
+    sink_lang = sink_node.attrs.get("lang", "") if sink_node else ""
+    covered = sink_lang in graph.taint_langs
+    path_exists = _bfs(_adjacency(graph, {"taint"}), source, sink, max_depth)
+    answer = not path_exists
+    provable = covered
+    receipt = NO_PATH_RECEIPT if (answer and provable) else None
+    return NoPathResult(answer=answer, provable=provable, receipt=receipt)
