@@ -72,6 +72,10 @@ a true positive you silently filter here is gone for good.
      Do not delete it. Mere doubt without a cited control is NOT a rejection — keep it
      `raw` at low confidence (see Recall posture).
    - **Hallucinated** (fails Gate −1): do not write it at all.
+   - **Runtime-dependent**: if a finding is real in code but its exploitability can only be
+     settled with data NOT in the repo (catalog contents, a live host, whether a committed
+     secret is live), set `runtime_dependent: true` on the finding (keep `status: "raw"`).
+     Do not force it to a confident `raw` or drop it — the marker routes it to the runtime plan.
 6. Newly discovered issues (no existing candidate) get a fresh, class-prefixed id
    (see Output below). Existing candidates are updated IN PLACE by their id.
 

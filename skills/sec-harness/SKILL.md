@@ -283,6 +283,9 @@ delivery, business-logic abuse). This phase hands a human exactly which of those
 running system, and how. **The harness never executes the target — it emits a plan a person
 runs manually.**
 
+0. **Promote runtime-dependent leads** (no LLM): run `promote_runtime_dependent(ws)` (from
+   `sec_harness.campaign`) so raw findings marked `runtime_dependent` become
+   `needs-deployment-testing` and enter the plan (O-021).
 1. **Red Team** (model: sonnet): spawn `agents/redteam.md`. It sets `runtime_disposition` on
    each confirmed finding — `static-settled` (source-provable) or `needs-runtime` (needs a live
    check) — and writes a `runtime_test` block (`objective`/`preconditions`/`payloads` with

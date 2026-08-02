@@ -91,7 +91,11 @@ substitute for reading the control; only the threat model's declared trust bound
      tool failed, output unparseable, or you cannot cite a defeating control
      but also cannot confirm): leave `status: "raw"` and set
      `verification: "verify-error"`. This is NOT a rejection and NOT a
-     confirmation — it is an honest incomplete.
+     confirmation — it is an honest incomplete. When you cannot confirm
+     because the missing evidence is runtime/external data (not a code
+     control you could cite), set `verification: "verify-error"` AND
+     `runtime_dependent: true` — it will be promoted to
+     `needs-deployment-testing` for the red-team plan, not silently dropped.
 
 ## Output
 Update every reviewed finding file in place. Every `raw` finding you started
