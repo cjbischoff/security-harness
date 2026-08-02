@@ -59,21 +59,73 @@ def _crit(cvss, preconds):
                    cvss_vector=cvss, preconditions=preconds)
 
 
+def test_precondition_weight_ignores_free_preconditions():
+    from sec_harness.calibrate import _precondition_weight
+    # unauthenticated / no-config / public are NOT mitigants -> weight 0
+    assert _precondition_weight(
+        ["unauthenticated buyer reaching checkout", "no config required", "public endpoint"]
+    ) == 0.0
+    # a real barrier counts; "unauth" containing "auth" must not misclassify as weak
+    assert _precondition_weight(["requires admin token"]) == 1.0
+    assert _precondition_weight(["authenticated low-priv user"]) == 0.5
+
+
+def test_precondition_cap_uses_weight_not_count():
+    from sec_harness.calibrate import _precondition_cap
+    # three FREE preconditions -> weight 0 -> no cap (was: count 3 -> cap 5)
+    assert _precondition_cap(["unauthenticated", "remote", "no setup"]) == 10
+    # one strong barrier -> weight 1 -> cap 8
+    assert _precondition_cap(["requires admin token"]) == 8
+    # two strong -> weight 2 -> cap 7
+    assert _precondition_cap(["requires admin token", "non-default config"]) == 7
+    # three strong -> weight 3 -> cap 5
+    assert _precondition_cap(["admin", "non-default config", "local access"]) == 5
+
+
 def test_precondition_cap_lowers_score():
     crit_vec = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"  # 9.8 -> 10
-    assert calibrate_score(_crit(crit_vec, [])) == 10             # 0 preconds -> no cap
-    assert calibrate_score(_crit(crit_vec, ["auth"])) == 8        # 1 -> cap 8
-    assert calibrate_score(_crit(crit_vec, ["auth", "cfg"])) == 7  # 2 -> cap 7
-    assert calibrate_score(_crit(crit_vec, ["auth", "cfg", "local"])) == 5  # 3+ -> cap 5
+    assert calibrate_score(_crit(crit_vec, [])) == 10                       # weight 0 -> no cap
+    assert calibrate_score(_crit(crit_vec, ["unauthenticated"])) == 10      # free -> no cap
+    assert calibrate_score(_crit(crit_vec, ["requires admin token",
+                                            "non-default config",
+                                            "local access"])) == 8          # weight 3 -> cap 5, floored 8
+
+
+def _sev(id_, sev, cvss, preconds):
+    from sec_harness.models import Finding, FindingStatus
+    return Finding(id=id_, rule_id="r", cls="authz", status=FindingStatus.CONFIRMED,
+                   severity=sev, file="a.py", line=1, message="m",
+                   cvss_vector=cvss, preconditions=preconds)
+
+
+def test_critical_never_ranks_below_medium():
+    # O-031: NoSQL-ATO critical (3 free preconds) must outrank a committed-secret medium.
+    from sec_harness.models import Severity
+    crit = _sev("C-CRIT", Severity.CRITICAL, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+                ["unauthenticated", "extended query parsing", "route wiring"])
+    med = _sev("C-MED", Severity.MEDIUM, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:H/A:N",
+               ["secret is live/unrotated"])
+    assert calibrate_score(crit) >= 8            # severity floor for critical
+    assert calibrate_score(crit) > calibrate_score(med)
+
+
+def test_severity_floor_values():
+    from sec_harness.calibrate import _severity_floor
+    from sec_harness.models import Severity
+    assert _severity_floor(Severity.CRITICAL) == 8
+    assert _severity_floor(Severity.HIGH) == 6
+    assert _severity_floor(Severity.MEDIUM) == 4
+    assert _severity_floor(Severity.LOW) == 2
 
 
 def test_inflation_flag_recorded(tmp_path):
-    # CRITICAL claimed (base 9) but 3 preconditions cap the derived score to 5 -> delta 4.
+    # CRITICAL claimed (base 9) but strong preconditions derive a pre-floor score of 5 -> delta 4;
+    # risk_score is floored to 8 for ordering, but the inflation advisory still fires off pre-floor.
     ws = Workspace(tmp_path / "ws"); ws.ensure()
     write_findings(ws, [_crit("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                               ["auth", "cfg", "local"])])
+                              ["requires admin token", "non-default config", "local access"])])
     calibrate_findings(ws)
     f = read_findings(ws)[0]
-    assert f.risk_score == 5
+    assert f.risk_score == 8                       # floored (ordering)
     events = [h for h in f.history if h.get("event") == "calibrate:severity-inflated"]
-    assert len(events) == 1 and events[0]["delta"] == 4
+    assert len(events) == 1 and events[0]["delta"] == 4   # 9 (claimed) - 5 (pre-floor derived)
