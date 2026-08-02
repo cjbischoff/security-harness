@@ -81,6 +81,9 @@ class Finding:
             dead_code|feature_flag|other. Feeds the red-team static-vs-runtime discrimination.
         judge_verdict: Cheap adjudicator's call after finder+critic (e.g. ``uphold`` /
             ``downgrade`` / ``severity-inflated``), a triage-ordering signal.
+        runtime_dependent: True when the only barrier to confirmation is data not in the
+            repo (catalog contents, a live host, whether a committed secret is live). Marks
+            a genuine runtime lead for ``campaign.promote_runtime_dependent`` (O-010/O-021).
     """
 
     id: str
@@ -111,6 +114,7 @@ class Finding:
     preconditions: list[str] = field(default_factory=list)
     reachability: dict | None = None
     judge_verdict: str | None = None
+    runtime_dependent: bool = False
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-safe dict (enums become their string values)."""
