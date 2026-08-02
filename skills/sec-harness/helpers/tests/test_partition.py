@@ -36,3 +36,31 @@ def test_unrouted_candidate_classes(tmp_path):
                         _f(4, "unknown"), _f(5, "deps")])
     out = unrouted_candidate_classes(ws, ["xss", "sqli"])
     assert out == {"security-other": 2, "unknown": 1}  # deps excluded, xss routed
+
+
+def test_demote_noise_moves_only_noise_candidates(tmp_path):
+    from sec_harness.models import Finding, FindingStatus, Severity
+    from sec_harness.partition import demote_noise
+    from sec_harness.workspace import Workspace, read_findings, write_findings
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    def c(id_, cls): return Finding(id=id_, rule_id="r", cls=cls, status=FindingStatus.CANDIDATE,
+                                    severity=Severity.LOW, file="a.py", line=1, message="m")
+    write_findings(ws, [c("C-1", "log-injection"), c("C-2", "sqli"), c("C-3", "clear-text-logging")])
+    assert demote_noise(ws) == 2
+    by = {f.id: f.status for f in read_findings(ws)}
+    assert by["C-1"] is FindingStatus.INFORMATIONAL
+    assert by["C-3"] is FindingStatus.INFORMATIONAL
+    assert by["C-2"] is FindingStatus.CANDIDATE   # real class untouched
+
+
+def test_reconcile_plan_adds_real_unrouted_classes(tmp_path):
+    from sec_harness.models import Finding, FindingStatus, Severity
+    from sec_harness.partition import reconcile_plan
+    from sec_harness.workspace import Workspace, write_findings
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    def c(id_, cls): return Finding(id=id_, rule_id="r", cls=cls, status=FindingStatus.CANDIDATE,
+                                    severity=Severity.LOW, file="a.py", line=1, message="m")
+    write_findings(ws, [c("C-1", "sqli"), c("C-2", "log-injection"), c("C-3", "deps"), c("C-4", "authz")])
+    out = reconcile_plan(ws, ["authz"])   # recon only planned authz; sqli is a real unrouted class
+    assert "sqli" in out and "authz" in out
+    assert "log-injection" not in out and "deps" not in out   # noise + deps not routed
