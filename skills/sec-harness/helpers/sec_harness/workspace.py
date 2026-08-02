@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +36,11 @@ class Workspace:
     def findings_dir(self) -> Path:
         """Directory holding one JSON file per finding."""
         return self.findings_dir_override or self.root / "findings"
+
+    @property
+    def runs(self) -> Path:
+        """Directory holding each agent's persisted final return (``<agent>.txt``)."""
+        return self.root / "runs"
 
     @property
     def reports(self) -> Path:
@@ -69,11 +76,39 @@ class Workspace:
         """Create the workspace directory tree if absent."""
         self.kb.mkdir(parents=True, exist_ok=True)
         self.findings_dir.mkdir(parents=True, exist_ok=True)
+        self.runs.mkdir(parents=True, exist_ok=True)
         self._reports.mkdir(parents=True, exist_ok=True)
 
 
+def _atomic_write(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically (temp file in the same dir + ``os.replace``).
+
+    Args:
+        path: Destination file.
+        text: Content to write.
+
+    Note:
+        The temp file shares ``path``'s directory so ``os.replace`` is a same-filesystem
+        rename (atomic on POSIX/Windows). A crash before the rename leaves ``path``
+        untouched; a stray temp file is removed on the failure path.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
 def write_findings(ws: Workspace, findings: list[Finding]) -> None:
-    """Write each finding to ``findings/<id>.json``.
+    """Write each finding to ``findings/<id>.json`` atomically.
+
+    Serializes each finding fully before touching disk so a serialization error never
+    truncates an existing file. Each write is a temp-file + ``os.replace`` (see
+    :func:`_atomic_write`), safe against a concurrent reader in another phase.
 
     Args:
         ws: Target workspace.
@@ -81,7 +116,36 @@ def write_findings(ws: Workspace, findings: list[Finding]) -> None:
     """
     ws.findings_dir.mkdir(parents=True, exist_ok=True)
     for f in findings:
-        (ws.findings_dir / f"{f.id}.json").write_text(json.dumps(f.to_dict(), indent=2))
+        payload = json.dumps(f.to_dict(), indent=2)
+        _atomic_write(ws.findings_dir / f"{f.id}.json", payload)
+
+
+def record_agent_return(ws: Workspace, agent: str, text: str) -> None:
+    """Persist an agent's final return to ``runs/<agent>.txt`` (T13).
+
+    Lets the orchestrator rely on durable disk state instead of a subagent's summary
+    message, which does not always propagate back.
+
+    Args:
+        ws: Target workspace.
+        agent: Agent/phase label (used as the filename stem).
+        text: The agent's final return text.
+    """
+    _atomic_write(ws.runs / f"{agent}.txt", text)
+
+
+def read_agent_return(ws: Workspace, agent: str) -> str | None:
+    """Read a persisted agent return, or ``None`` if none was recorded.
+
+    Args:
+        ws: Source workspace.
+        agent: Agent/phase label.
+
+    Returns:
+        The recorded text, or ``None`` when ``runs/<agent>.txt`` is absent.
+    """
+    p = ws.runs / f"{agent}.txt"
+    return p.read_text() if p.is_file() else None
 
 
 def read_findings(ws: Workspace) -> list[Finding]:
