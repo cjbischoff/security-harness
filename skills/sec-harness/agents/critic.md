@@ -47,13 +47,17 @@ For each `raw` finding:
 1. Re-open the sink and its callers (structural index) to confirm the code ships
    in a normal build and is reachable without a debug/test toggle.
 2. Decide:
-   - **Viable** → leave `status: "raw"` unchanged (do not edit the file).
+   - **Viable** → leave `status: "raw"` unchanged, but append a `history` entry
+     `{"event": "critic:viable"}` — a positive audit trail so "reviewed & passed"
+     is distinguishable from "never reviewed".
    - **Non-viable** → set `status: "rejected"` and append a `history` entry
      `{"event": "critic:rejected", "reason": "<one line>"}`. Keep all other fields.
 
 ## Output
-Update only the finding files you reject (in place). Return a summary: how many
-kept viable vs rejected, with a one-line reason per rejection.
+Update every finding file you review (in place) — viable ones get the
+`critic:viable` history event, non-viable ones get `rejected` + `critic:rejected`.
+Return a summary: how many kept viable vs rejected, with a one-line reason per
+rejection.
 
 ## Rules
 - Only reject with a concrete, file-grounded reason. Uncertainty about viability

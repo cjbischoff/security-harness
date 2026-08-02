@@ -75,6 +75,7 @@ phase with `record_stage(<WS>, "<phase>")` so passes advance.
 
 0. **Preflight** — `python -m sec_harness.preflight`; run any printed install/vendor commands before scanning (missing backends are skipped + logged). The report lists which **CodeQL query packs** are installed — the `codeql` binary being present does NOT mean the per-language packs exist, and a missing pack silently drops all of that language's dataflow coverage. If a language you will scan is not listed, run `codeql pack download codeql/<lang>-queries` first. CodeQL runs only on a trusted config (`codeql_config_trusted`); unsupported or untrusted configs are skipped and logged in the prefilter `failed` list.
 1. **Begin pass** — `from sec_harness.state import begin_pass; begin_pass(<WS>, <sha>)` (pins the SHA; increments on repeat passes). Note the import path: `begin_pass` lives in `sec_harness.state`; `record_stage`/`pass_report` live in `sec_harness.campaign`.
+C1. **Context-ingest** (sonnet) — `agents/context-ingest.md` → `kb/context.json`; `agents/context-adversary.md` (opus) pressure-checks it. Runs here, BEFORE recon, so its leads can feed recon's `attack_surface`. See **Context ingestion (C1/C2)** below.
 2. **Recon** (sonnet) — `agents/recon.md` → `kb/scan-profile.json`. Validate with `load_profile`. **→ phase gate** (`agents/phase-adversary.md`, opus).
 3. **Architecture** (sonnet) — `agents/architecture.md` → `kb/architecture.md` + `kb/entities/`. **→ phase gate**.
 4. **Threat model** (sonnet) — `agents/threat-model.md` → `kb/THREAT_MODEL.md` (hunt list). **→ phase gate**.
@@ -391,18 +392,26 @@ passes is a known refinement (see Plan 6 notes).
 The harness reads the repo's OWN security context and its own prior scans, and turns
 both into scan-driving material — while treating repo docs as untrusted claims.
 
-**Phase C1 — context-ingest** (after preflight/recon, before threat-model): spawn
-`agents/context-ingest.md` (sonnet, READ-ONLY). It discovers context docs
+**Phase C1 — context-ingest** (canonical order: after preflight, BEFORE recon — its leads
+feed recon; a recon `attack_surface` class may be added from a lead only if a code indicator
+also exists): spawn `agents/context-ingest.md` (sonnet, READ-ONLY). It discovers context docs
 (`sec_harness.context.discover_context_files` — `docs/`, `openspec/`, ADRs, `SECURITY*`,
 runbooks, `*-review*.md`, `test-findings*`) **and** the prior scan's `kb/prior_context.json`,
 distills them into `kb/context.json` (+ `CONTEXT.md`). Every item is trust-tagged
 (`untrusted-doc` / `prior-scan`). **C1 verifies now (rework):** for each `claimed_control` it
 sets `verify_status` (PRESENT/MISSING/BYPASSABLE) against code and writes MISSING/BYPASSABLE
 controls as `CTL-####` **CANDIDATE** findings via `context.control_findings` (evidence
-`llm-claimed:doc-claim`, so they cannot confirm on doc text alone). Then
-`agents/context-adversary.md` (opus, different family) pressure-checks the verification
-(PRESENT-without-proof? finding on doc text alone? missed bypass? trust-contract breach?)
-before any later phase consumes it. This DRIVES later phases:
+`llm-claimed:doc-claim`, so they cannot confirm on doc text alone). It also carries every
+`attack_lead` item forward as a `LEAD-####` **NEEDS_DEPLOYMENT_TESTING** finding via
+`context.manual_review_findings(ctx, sha)` — so an out-of-band lead (e.g. a CI deploy-token
+path) reaches the red-team plan's manual section instead of vanishing when investigate has no
+class to route it to. Then `agents/context-adversary.md` (opus, different family)
+pressure-checks the verification (PRESENT-without-proof? finding on doc text alone? missed
+bypass? trust-contract breach?) before any later phase consumes it. Both this phase and the
+Phase 0-1 phase gates (recon/architecture/threat-model) build their claims with
+`sec_harness.phase_gate.claims_from_profile(profile)` / `claims_from_context(ctx)` rather than
+hand-rolling `{"id","refs"}` dicts — use these helpers, don't reimplement them. This DRIVES
+later phases:
 - threat-model imports `context.hunt_rows(ctx)` → trust boundaries + claimed controls
   become prioritized hunt rows;
 - investigate imports `context.control_worklist(ctx)` → each **claimed control** is a
