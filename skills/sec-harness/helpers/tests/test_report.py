@@ -51,6 +51,21 @@ def test_select_reportable_filters_and_sorts():
     assert [f.id for f in out] == ["F-0002", "F-0001"]  # rejected/candidate dropped; risk-sorted
 
 
+def test_report_renders_coverage_section(tmp_path):
+    import json
+
+    from sec_harness.workspace import Workspace
+
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    (ws.kb / "coverage.json").write_text(json.dumps({
+        "languages": [{"language": "liquid", "files": 194, "tier": "none"},
+                      {"language": "javascript", "files": 40, "tier": "dataflow"}],
+        "dataflow_pct": 17, "uncovered": ["liquid"]}))
+    write_report(ws)
+    md = ws.report_path.read_text()
+    assert "Coverage" in md and "liquid" in md and "17%" in md
+
+
 def test_write_report_writes_final_artifacts(tmp_path):
     import json
 
@@ -126,3 +141,16 @@ def test_report_sections_needs_deployment(tmp_path):
     res = write_report(ws)
     assert res["reported"] == 0
     assert "Needs deployment testing" in ws.report_path.read_text()
+
+
+def test_report_links_redteam_plan_and_shows_receipts(tmp_path):
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    (ws.reports).mkdir(parents=True, exist_ok=True)
+    (ws.reports / "redteam-plan.md").write_text("# plan\n")
+    write_findings(ws, [Finding(id="F-1", rule_id="r", cls="authz", status=FindingStatus.CONFIRMED,
+                                severity=Severity.MEDIUM, file="a.py", line=1, message="m",
+                                risk_score=5, evidence_sources=["ripgrep:a.py:1"])])
+    write_report(ws)
+    md = (ws.reports / "report.md").read_text()
+    assert "redteam-plan.md" in md            # T11a: link the manual test plan
+    assert "ripgrep:a.py:1" in md             # T11b: receipts visible even in condensed (medium) tier

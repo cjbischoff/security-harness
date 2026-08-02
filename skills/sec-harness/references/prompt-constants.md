@@ -29,6 +29,8 @@ State preconditions, required access level, and blast radius BEFORE choosing a t
 When uncertain between two tiers, choose the LOWER — a mislabeled HIGH burns reviewer
 trust faster than a cautious MEDIUM. Propose a CVSS 3.1 vector; the harness computes the
 score deterministically (never assert a numeric score yourself).
+Legal CVSS 3.1 base-metric values (use ONLY these): AV:[N,A,L,P] AC:[L,H] PR:[N,L,H] UI:[N,R]
+S:[U,C] C:[N,L,H] I:[N,L,H] A:[N,L,H]. Never emit a value outside these sets (e.g. `C:M` is invalid).
 
 ## SEVERITY_PRECONDITION
 Write the finding's `preconditions` list (a JSON array of strings) BEFORE choosing a

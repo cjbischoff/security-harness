@@ -75,10 +75,11 @@ phase with `record_stage(<WS>, "<phase>")` so passes advance.
 
 0. **Preflight** — `python -m sec_harness.preflight`; run any printed install/vendor commands before scanning (missing backends are skipped + logged). The report lists which **CodeQL query packs** are installed — the `codeql` binary being present does NOT mean the per-language packs exist, and a missing pack silently drops all of that language's dataflow coverage. If a language you will scan is not listed, run `codeql pack download codeql/<lang>-queries` first. CodeQL runs only on a trusted config (`codeql_config_trusted`); unsupported or untrusted configs are skipped and logged in the prefilter `failed` list.
 1. **Begin pass** — `from sec_harness.state import begin_pass; begin_pass(<WS>, <sha>)` (pins the SHA; increments on repeat passes). Note the import path: `begin_pass` lives in `sec_harness.state`; `record_stage`/`pass_report` live in `sec_harness.campaign`.
+C1. **Context-ingest** (sonnet) — `agents/context-ingest.md` → `kb/context.json`; `agents/context-adversary.md` (opus) pressure-checks it. Runs here, BEFORE recon, so its leads can feed recon's `attack_surface`. See **Context ingestion (C1/C2)** below.
 2. **Recon** (sonnet) — `agents/recon.md` → `kb/scan-profile.json`. Validate with `load_profile`. **→ phase gate** (`agents/phase-adversary.md`, opus).
 3. **Architecture** (sonnet) — `agents/architecture.md` → `kb/architecture.md` + `kb/entities/`. **→ phase gate**.
 4. **Threat model** (sonnet) — `agents/threat-model.md` → `kb/THREAT_MODEL.md` (hunt list). **→ phase gate**.
-5. **Prefilter** (no LLM) — `from sec_harness.prefilter import run_prefilter; run_prefilter(ws, target, profile)` (args: `Workspace`, target path, the `ScanProfile` from recon — NOT the raw `sast_plan` dict). Backends run concurrently (one unit per semgrep ruleset / codeql language); results are merged deterministically (sorted, `C-####` ids) so serial and concurrent runs are byte-identical. Returns `{candidates, backends_run, skipped, failed, excluded, dropped_nonsecurity, skipped_reasons}`: `skipped_reasons` maps each backend that did NOT run to a reason (`disabled`/`absent`/`untrusted`/`pack-missing`); `dropped_nonsecurity` counts non-security semgrep lint dropped by the security-only filter; `failed` lists backends that errored. **A scan is only clean if every PLANNED backend ran. STOP and surface a setup error if `backends_run` is empty OR any planned backend appears in `failed` / `skipped_reasons` (e.g. `codeql: pack-missing` = a missing query pack → zero dataflow for that language). A partial scan (semgrep ran, codeql failed) is a coverage hole, not "no findings" — do NOT report it as clean.**
+5. **Prefilter** (no LLM) — `from sec_harness.prefilter import run_prefilter; run_prefilter(ws, target, profile)` (args: `Workspace`, target path, the `ScanProfile` from recon — NOT the raw `sast_plan` dict). Backends run concurrently (one unit per semgrep ruleset / codeql language); results are merged deterministically (sorted, `C-####` ids) so serial and concurrent runs are byte-identical. Returns `{candidates, backends_run, skipped, failed, excluded, dropped_nonsecurity, skipped_reasons}`: `skipped_reasons` maps each backend that did NOT run to a reason (`disabled`/`absent`/`untrusted`/`pack-missing`); `dropped_nonsecurity` counts non-security semgrep lint dropped by the security-only filter; `failed` lists backends that errored. **A scan is only clean if every PLANNED backend ran. STOP and surface a setup error if `backends_run` is empty OR any planned backend appears in `failed` / `skipped_reasons` (e.g. `codeql: pack-missing` = a missing query pack → zero dataflow for that language). A partial scan (semgrep ran, codeql failed) is a coverage hole, not "no findings" — do NOT report it as clean.** Then `demote_noise(ws)` (moves log-injection/clear-text-logging/unknown candidates to `informational`) and `agents = reconcile_plan(ws, profile.agents_to_spawn)` (routes real-security classes recon omitted). Spawn investigate agents over the reconciled `agents`; the general-triage `security-other` agent handles any residual unrouted classes.
 6. **Investigate** (sonnet, parallel over `scan-profile.agents_to_spawn`) — `agents/investigate.md` per class → `raw`/`rejected`/new `A-####`.
 7. **Dedupe** (no LLM) — `python -m sec_harness.dedupe --workspace <WS>`.
 8. **Critic** (sonnet) — `agents/critic.md` (production viability) → rejects non-shipping.
@@ -173,7 +174,10 @@ Run AFTER the KB build. Prerequisites in the workspace: `kb/scan-profile.json`,
    `uv run python -m sec_harness.cli scan --target <T> --workspace <WS> --config <rules> --sha <sha>`
 2. **Investigate** (model: sonnet, PARALLEL): partition candidates first —
    `partition_candidates_by_class(ws)` (from `sec_harness.partition`) groups them
-   by `cls`. Then dispatch the investigate subagents **in ONE message** — one per
+   by `cls`. Investigate runs whenever `must_investigate(profile)` is true (any
+   planned class) — even at 0 SAST candidates. A 0-candidate business-logic repo
+   is a coverage story, not a clean bill (O-007). Then dispatch the investigate
+   subagents **in ONE message** — one per
    class in `scan-profile.json` `agents_to_spawn`, each with `agents/investigate.md`
    (substituting `{{ATTACK_CLASS}}`, `{{TARGET}}`, `{{WORKSPACE}}`) and handed its
    partition — so they run concurrently.
@@ -280,6 +284,9 @@ delivery, business-logic abuse). This phase hands a human exactly which of those
 running system, and how. **The harness never executes the target — it emits a plan a person
 runs manually.**
 
+0. **Promote runtime-dependent leads** (no LLM): run `promote_runtime_dependent(ws)` (from
+   `sec_harness.campaign`) so raw findings marked `runtime_dependent` become
+   `needs-deployment-testing` and enter the plan (O-021).
 1. **Red Team** (model: sonnet): spawn `agents/redteam.md`. It sets `runtime_disposition` on
    each confirmed finding — `static-settled` (source-provable) or `needs-runtime` (needs a live
    check) — and writes a `runtime_test` block (`objective`/`preconditions`/`payloads` with
@@ -385,18 +392,26 @@ passes is a known refinement (see Plan 6 notes).
 The harness reads the repo's OWN security context and its own prior scans, and turns
 both into scan-driving material — while treating repo docs as untrusted claims.
 
-**Phase C1 — context-ingest** (after preflight/recon, before threat-model): spawn
-`agents/context-ingest.md` (sonnet, READ-ONLY). It discovers context docs
+**Phase C1 — context-ingest** (canonical order: after preflight, BEFORE recon — its leads
+feed recon; a recon `attack_surface` class may be added from a lead only if a code indicator
+also exists): spawn `agents/context-ingest.md` (sonnet, READ-ONLY). It discovers context docs
 (`sec_harness.context.discover_context_files` — `docs/`, `openspec/`, ADRs, `SECURITY*`,
 runbooks, `*-review*.md`, `test-findings*`) **and** the prior scan's `kb/prior_context.json`,
 distills them into `kb/context.json` (+ `CONTEXT.md`). Every item is trust-tagged
 (`untrusted-doc` / `prior-scan`). **C1 verifies now (rework):** for each `claimed_control` it
 sets `verify_status` (PRESENT/MISSING/BYPASSABLE) against code and writes MISSING/BYPASSABLE
 controls as `CTL-####` **CANDIDATE** findings via `context.control_findings` (evidence
-`llm-claimed:doc-claim`, so they cannot confirm on doc text alone). Then
-`agents/context-adversary.md` (opus, different family) pressure-checks the verification
-(PRESENT-without-proof? finding on doc text alone? missed bypass? trust-contract breach?)
-before any later phase consumes it. This DRIVES later phases:
+`llm-claimed:doc-claim`, so they cannot confirm on doc text alone). It also carries every
+`attack_lead` item forward as a `LEAD-####` **NEEDS_DEPLOYMENT_TESTING** finding via
+`context.manual_review_findings(ctx, sha)` — so an out-of-band lead (e.g. a CI deploy-token
+path) reaches the red-team plan's manual section instead of vanishing when investigate has no
+class to route it to. Then `agents/context-adversary.md` (opus, different family)
+pressure-checks the verification (PRESENT-without-proof? finding on doc text alone? missed
+bypass? trust-contract breach?) before any later phase consumes it. Both this phase and the
+Phase 0-1 phase gates (recon/architecture/threat-model) build their claims with
+`sec_harness.phase_gate.claims_from_profile(profile)` / `claims_from_context(ctx)` rather than
+hand-rolling `{"id","refs"}` dicts — use these helpers, don't reimplement them. This DRIVES
+later phases:
 - threat-model imports `context.hunt_rows(ctx)` → trust boundaries + claimed controls
   become prioritized hunt rows;
 - investigate imports `context.control_worklist(ctx)` → each **claimed control** is a

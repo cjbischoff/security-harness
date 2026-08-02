@@ -71,6 +71,10 @@ def render_finding(f: Finding) -> str:
              f"`{f.cvss_vector or '(no vector)'}` — computed risk **{risk}**. "
              "Score computed deterministically from the vector; tier held lower when a "
              "precondition is unproven."), ""]
+    if not full:
+        out += [("**Confirmation:** "
+                 + (", ".join(f"`{r}`" for r in receipts)
+                    or "**NONE — not confirmable on llm-claimed evidence alone**") + "."), ""]
     # §6 Attack Scenario (full tier only)
     if full:
         out += [("**6. Confirmed Attack Scenario** (theoretical — not dynamically "
@@ -86,7 +90,8 @@ def render_finding(f: Finding) -> str:
 
 
 def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = None,
-                needs_deployment: list[Finding] | None = None) -> str:
+                needs_deployment: list[Finding] | None = None,
+                coverage: dict | None = None, has_redteam_plan: bool = False) -> str:
     """Render findings and optional token accounting as Markdown.
 
     The findings table includes Risk (calibrated 1-10 score) and Verification
@@ -95,6 +100,12 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
     Args:
         findings: Findings to render.
         token_spend: Optional per-phase token totals.
+        needs_deployment: Findings real-but-unprovable from source alone.
+        coverage: Optional ``compute_coverage`` output (``kb/coverage.json``); when given,
+            appends a "Coverage & limitations" section so a clean scan carries its
+            denominator (O-007/O-033). Omitted entirely when ``None``.
+        has_redteam_plan: True when ``redteam-plan.md`` exists in the reports dir; adds a
+            "Manual runtime testing" section pointing the engineer at it (O-022).
 
     Returns:
         A Markdown report string.
@@ -129,6 +140,20 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
         for f in sorted(needs_deployment, key=lambda f: f.id):
             lines.append(f"| {f.id} | {f.cls} | {f.severity.value} | "
                          f"{f.file}:{f.line} | {f.message} |")
+    if coverage:
+        lines += ["", "## Coverage & limitations", "",
+                  ("_SAST coverage by language. `none` = no mechanical dataflow OR pattern "
+                   "analysis (LLM shape-hunting only)._"), "",
+                  "| Language | Files | Tier |", "|----------|-------|------|"]
+        for lang in coverage.get("languages", []):
+            lines.append(f"| {lang['language']} | {lang['files']} | {lang['tier']} |")
+        uncovered = ", ".join(coverage.get("uncovered", [])) or "none"
+        lines += ["", (f"Dataflow coverage: {coverage.get('dataflow_pct', 0)}% of counted "
+                       f"source. Uncovered (LLM-only): {uncovered}.")]
+    if has_redteam_plan:
+        lines += ["", "## Manual runtime testing", "",
+                  ("See `redteam-plan.md` for the runtime test directives "
+                   "(needs-runtime findings).")]
     if token_spend:
         lines += ["", "## Token spend by phase", ""]
         lines += [f"- **{phase}**: {n}" for phase, n in token_spend.items()]
@@ -167,8 +192,12 @@ def write_report(ws: Workspace) -> dict:
     all_findings = read_findings(ws)
     reportable = select_reportable(all_findings)
     ndt = [f for f in all_findings if f.status is FindingStatus.NEEDS_DEPLOYMENT_TESTING]
+    coverage_path = ws.kb / "coverage.json"
+    coverage = json.loads(coverage_path.read_text()) if coverage_path.exists() else None
+    has_redteam_plan = (ws.reports / "redteam-plan.md").exists()
     ws.sarif_path.write_text(json.dumps(to_sarif(reportable), indent=2))
-    ws.report_path.write_text(to_markdown(reportable, needs_deployment=ndt))
+    ws.report_path.write_text(to_markdown(reportable, needs_deployment=ndt, coverage=coverage,
+                                          has_redteam_plan=has_redteam_plan))
     ws.findings_json_path.write_text(json.dumps([f.to_dict() for f in reportable], indent=2))
     return {"reported": len(reportable), "sarif": str(ws.sarif_path), "report": str(ws.report_path)}
 

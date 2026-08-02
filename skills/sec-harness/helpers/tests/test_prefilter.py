@@ -251,6 +251,20 @@ def test_prefilter_never_silent_unimplemented_backend(tmp_path):
     assert res["skipped_reasons"].get("sca") == "disabled"
 
 
+def test_run_prefilter_result_has_coverage(tmp_path):
+    import json
+
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    sem = lambda target, config, **k: [_cand("sqli", "a.go", 1)]
+    cql = lambda target, language, db_dir, **k: [_cand("ssrf", "b.go", 2)]
+    res = run_prefilter(ws, str(tmp_path), _profile(), semgrep=sem, codeql=cql,
+                        has_tool=lambda n: "/x", qlpack_fn=lambda lang: True)
+    assert isinstance(res["coverage"]["languages"], list)
+    assert res["coverage"]["languages"][0]["language"] == "go"
+    persisted = json.loads((ws.kb / "coverage.json").read_text())
+    assert persisted == res["coverage"]
+
+
 def test_codeql_db_not_left_in_workspace(tmp_path):
     # regression: the CodeQL DB is a large rebuildable artifact and must NOT be
     # written into the (now durable) workspace/memory root.

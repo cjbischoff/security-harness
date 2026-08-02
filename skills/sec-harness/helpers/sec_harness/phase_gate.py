@@ -59,14 +59,16 @@ class GateDecision:
     claim_id: str
     status: str  # "reject" | "to-adversary"
     reasons: list[str] = field(default_factory=list)
+    refs: list[str] = field(default_factory=list)
+    text: str = ""
 
 
 def run_phase_checks(claims: list[dict], target_root: str | Path) -> list[GateDecision]:
     """Return a :class:`GateDecision` per claim for an analysis/context phase.
 
     Args:
-        claims: Each is ``{"id": str, "refs": [path or file:line, ...]}`` — the code
-            references the phase's claim rests on.
+        claims: Each is ``{"id": str, "text": str, "refs": [path or file:line, ...]}`` — the
+            claim's assertion and the code references it rests on.
         target_root: The scanned repo root the references resolve against.
 
     Returns:
@@ -86,7 +88,8 @@ def run_phase_checks(claims: list[dict], target_root: str | Path) -> list[GateDe
                 reject = True
         if not refs:
             reasons.append("no code refs to verify — sent to adversary on judgment alone")
-        out.append(GateDecision(cid, "reject" if reject else "to-adversary", reasons))
+        out.append(GateDecision(cid, "reject" if reject else "to-adversary", reasons,
+                                 refs=list(refs), text=str(claim.get("text", ""))))
     return out
 
 
@@ -105,12 +108,15 @@ def build_gate_record(
 
     Returns:
         ``{phase, claims_in, rejected_deterministically, sent_to_adversary, survivors,
-        decisions, verdicts}``.
+        decisions, verdicts, claims}``, where ``claims`` maps each sent-to-adversary
+        claim id to its ``{text, refs}`` so the adversary reviews content, not opaque ids.
     """
     verdicts = verdicts or {}
     rejected_det = [d.claim_id for d in decisions if d.status == "reject"]
     to_adv = [d.claim_id for d in decisions if d.status == "to-adversary"]
     survivors = [c for c in to_adv if verdicts.get(c, "CONFIRMED") != "INVALIDATED"]
+    claims = {d.claim_id: {"text": d.text, "refs": d.refs}
+              for d in decisions if d.status == "to-adversary"}
     return {
         "phase": phase,
         "claims_in": len(decisions),
@@ -119,7 +125,51 @@ def build_gate_record(
         "survivors": survivors,
         "decisions": [asdict(d) for d in decisions],
         "verdicts": verdicts,
+        "claims": claims,
     }
+
+
+def claims_from_profile(profile) -> list[dict]:
+    """Turn a recon ScanProfile into gate claims (one per entrypoint + subsystem).
+
+    Args:
+        profile: A :class:`sec_harness.profile.ScanProfile` (or any object exposing the same
+            ``entrypoints`` / ``subsystems`` attributes).
+
+    Returns:
+        Claims in ``{"id", "text", "refs"}`` form, ready for :func:`run_phase_checks`.
+    """
+    claims: list[dict] = []
+    for i, ep in enumerate(getattr(profile, "entrypoints", []) or []):
+        ref = ep.split(":")[0] if isinstance(ep, str) else str(ep)
+        claims.append({"id": f"ep-{i}", "text": f"entrypoint {ep}",
+                       "refs": [ref] if ref else []})
+    for i, s in enumerate(getattr(profile, "subsystems", []) or []):
+        name = s.get("name", f"sub-{i}")
+        claims.append({"id": f"sub-{i}:{name}",
+                       "text": f"subsystem {name}: {s.get('why', '')}",
+                       "refs": list(s.get("paths", []))})
+    return claims
+
+
+def claims_from_context(ctx) -> list[dict]:
+    """Turn an ingested Context into gate claims (one per item with a code location).
+
+    Args:
+        ctx: A :class:`sec_harness.context.Context` (or any object exposing an ``items``
+            list of :class:`~sec_harness.context.ContextItem`-shaped entries).
+
+    Returns:
+        Claims in ``{"id", "text", "refs"}`` form, ready for :func:`run_phase_checks`.
+    """
+    claims: list[dict] = []
+    for i, it in enumerate(getattr(ctx, "items", []) or []):
+        where = getattr(it, "where", "") or ""
+        kind = getattr(it, "kind", "item")
+        text = getattr(it, "text", "") or ""
+        claims.append({"id": f"ctx-{i}", "text": f"{kind}: {text}".strip(),
+                       "refs": [where] if where else []})
+    return claims
 
 
 def write_gate_record(ws, phase: str, record: dict) -> Path:

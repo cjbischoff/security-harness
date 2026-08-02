@@ -91,3 +91,24 @@ def test_from_dict_tolerates_unknown_keys():
 def test_needs_deployment_status():
     from sec_harness.models import FindingStatus
     assert FindingStatus("needs-deployment-testing") is FindingStatus.NEEDS_DEPLOYMENT_TESTING
+
+
+def test_runtime_dependent_field_roundtrips_and_defaults_false():
+    from sec_harness.models import Finding, FindingStatus, Severity
+    f = Finding(id="F-1", rule_id="r", cls="business-logic", status=FindingStatus.RAW,
+                severity=Severity.LOW, file="a.py", line=1, message="m")
+    assert f.runtime_dependent is False
+    f.runtime_dependent = True
+    assert Finding.from_dict(f.to_dict()).runtime_dependent is True
+
+
+def test_informational_status_roundtrips_and_is_terminal():
+    from sec_harness.campaign import TERMINAL_STATUSES
+    from sec_harness.models import Finding, FindingStatus
+    f = Finding(id="C-1", rule_id="r", cls="log-injection", status=FindingStatus.INFORMATIONAL,
+                severity=__import__("sec_harness.models", fromlist=["Severity"]).Severity.INFO,
+                file="a.py", line=1, message="noise")
+    d = f.to_dict()
+    assert d["status"] == "informational"
+    assert Finding.from_dict(d).status is FindingStatus.INFORMATIONAL
+    assert FindingStatus.INFORMATIONAL in TERMINAL_STATUSES

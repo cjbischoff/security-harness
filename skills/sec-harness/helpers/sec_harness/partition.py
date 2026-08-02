@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from sec_harness.models import Finding
-from sec_harness.workspace import Workspace, read_findings
+from sec_harness.clsmap import is_noise_class
+from sec_harness.models import Finding, FindingStatus
+from sec_harness.workspace import Workspace, read_findings, write_findings
 
 
 def partition_candidates_by_class(ws: Workspace) -> dict[str, list[Finding]]:
@@ -49,3 +50,61 @@ def unrouted_candidate_classes(ws: Workspace, agents_to_spawn: list[str]) -> dic
         if n:
             out[cls] = n
     return out
+
+
+def demote_noise(ws: Workspace) -> int:
+    """Demote candidate findings in a NOISE_CLASS to INFORMATIONAL (they never enter the FP ladder).
+
+    Args:
+        ws: Workspace to read and (if any were demoted) rewrite findings for.
+
+    Returns:
+        The number of findings demoted.
+    """
+    findings = read_findings(ws)
+    n = 0
+    for f in findings:
+        if f.status is FindingStatus.CANDIDATE and is_noise_class(f.cls):
+            f.status = FindingStatus.INFORMATIONAL
+            f.history.append({"event": "partition:demoted-noise", "cls": f.cls})
+            n += 1
+    if n:
+        write_findings(ws, findings)
+    return n
+
+
+def reconcile_plan(ws: Workspace, agents_to_spawn: list[str]) -> list[str]:
+    """Augment ``agents_to_spawn`` with real-security candidate classes recon omitted (O-025).
+
+    Args:
+        ws: Workspace to read candidates from.
+        agents_to_spawn: The profile's planned ``agents_to_spawn`` list.
+
+    Returns:
+        ``agents_to_spawn`` followed by any additional real-security classes present
+        among candidates, sorted. Never removes a planned class. Only adds a class
+        with at least one live CANDIDATE finding — a class whose findings already
+        settled (confirmed/rejected/stale on a later pass) is not re-routed.
+    """
+    parts = partition_candidates_by_class(ws)
+    extra = sorted(
+        cls for cls, fs in parts.items()
+        if cls not in agents_to_spawn and cls != "deps" and not is_noise_class(cls)
+        and any(f.status is FindingStatus.CANDIDATE for f in fs)
+    )
+    return list(agents_to_spawn) + extra
+
+
+def must_investigate(profile) -> bool:
+    """Investigate MUST run when the profile plans any class, EVEN at 0 SAST candidates (O-007).
+
+    A business-logic target is SAST-empty but not risk-free; gating investigate on candidate
+    existence is a signal inversion. The hunt list drives investigation regardless of candidates.
+
+    Args:
+        profile: A ``ScanProfile``-shaped object exposing ``agents_to_spawn``.
+
+    Returns:
+        ``True`` if the profile planned any attack-class agent, ``False`` otherwise.
+    """
+    return bool(getattr(profile, "agents_to_spawn", []) or [])

@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from sec_harness.cvss import cvss31_base, offensive_priority
-from sec_harness.models import Finding, FindingStatus
+from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.workspace import Workspace, read_findings, write_findings
 
 _BASE = {"critical": 9, "high": 7, "medium": 5, "low": 3, "info": 1}
@@ -15,21 +15,67 @@ _HIGH_IMPACT = {"sqli", "cmdi", "deserialization", "ssti", "authz", "ssrf", "pat
 # mainstream app does the same, unexploited in years of prod) is capped low — a
 # textbook deviation that a real baseline accepts is not a high-risk finding.
 _BASELINE_CAP = 4
-# Severity-from-preconditions (reference-tool rule): more/harder preconditions cap risk.
-# 0 preconditions (unauth/remote/no setup) → no cap; 1-2 → cap 8/7; 3+ → cap 5.
-_PRECOND_CAP = {0: 10, 1: 8, 2: 7}
+# A precondition lowers risk only when it is a real barrier an attacker must overcome.
+# Free conditions (unauthenticated/remote/default) are NOT mitigants and never lower risk
+# (fixes O-031: enumerating free preconditions must not penalize a finding).
+_PRECOND_FREE = ("unauth", "no auth", "without auth", "anonymous", "public", "no config",
+                 "default config", "no setup", "remote", "any user", "no special", "no privilege")
+_PRECOND_STRONG = ("admin", "operator", "root", "superuser", "non-default", "feature flag",
+                   "feature-flag", "local access", "local-only", "physical", "prior primitive",
+                   "prior-primitive", "chained", "mitm", "man-in-the-middle",
+                   "specific config", "specific configuration", "guessed", "brute")
+_PRECOND_WEAK = ("auth", "login", "logged", "session", "account", "one hop", "csrf",
+                 "user interaction")
 # A claimed severity this far above the derived score is flagged as inflation (recall-safe:
 # we flag, we do not silently drop or re-score).
 _INFLATION_THRESHOLD = 3
+# Severity floor (fixes O-031): a medium can reach 8 via CVSS (C:L/I:H), so a critical must floor
+# at 8. Prevents inversion when severity and CVSS agree; disagreement is surfaced via the
+# inflation flag, not averaged.
+_SEVERITY_FLOOR = {"critical": 8, "high": 6, "medium": 4, "low": 2, "info": 1}
 
 
 def _is_baseline_standard(finding: Finding) -> bool:
     return any(h.get("event") == "baseline:industry-standard" for h in finding.history)
 
 
-def _precondition_cap(n: int) -> int:
-    """Risk-score ceiling for a finding with ``n`` preconditions (3+ → 5)."""
-    return _PRECOND_CAP.get(n, 5)
+def _precondition_weight(preconditions: list[str]) -> float:
+    """Summed difficulty weight of preconditions (free=0, weak=0.5, strong=1.0, unknown=0)."""
+    total = 0.0
+    for p in preconditions:
+        s = p.lower()
+        if any(k in s for k in _PRECOND_STRONG):
+            # checked first: "non-default config" must win over FREE's "default config" substring
+            total += 1.0
+        elif any(k in s for k in _PRECOND_FREE):
+            continue  # non-mitigant; checked before weak so "unauth..." never matches "auth"
+        elif any(k in s for k in _PRECOND_WEAK):
+            total += 0.5
+    return total
+
+
+def _precondition_cap(preconditions: list[str]) -> int:
+    """Risk ceiling from precondition DIFFICULTY (weight), not count.
+
+    Args:
+        preconditions: The finding's precondition strings.
+
+    Returns:
+        Ceiling in ``[5, 10]``: ``w<1 -> 10``, ``1<=w<2 -> 8``, ``2<=w<3 -> 7``, ``w>=3 -> 5``.
+    """
+    w = _precondition_weight(preconditions)
+    if w < 1:
+        return 10
+    if w < 2:
+        return 8
+    if w < 3:
+        return 7
+    return 5
+
+
+def _severity_floor(severity: Severity) -> int:
+    """Minimum risk_score implied by the severity band."""
+    return _SEVERITY_FLOOR.get(severity.value, 1)
 
 
 def _heuristic_score(finding: Finding) -> int:
@@ -42,17 +88,8 @@ def _heuristic_score(finding: Finding) -> int:
     return max(1, min(10, score))
 
 
-def calibrate_score(finding: Finding) -> int:
-    """Compute a 1-10 risk score from CVSS/severity, then apply the precondition + baseline caps.
-
-    Args:
-        finding: The finding to score.
-
-    Returns:
-        An integer in ``[1, 10]``: the CVSS 3.1 base (rounded) if a valid vector is present,
-        else the severity heuristic (+1 for >=2-hop dataflow, +1 for a high-impact class); then
-        lowered to the precondition ceiling (more preconditions → lower) and the baseline cap.
-    """
+def _derived_score(finding: Finding) -> int:
+    """Pre-floor score: CVSS/heuristic then precondition cap (NO severity floor)."""
     raw = None
     if finding.cvss_vector:
         try:
@@ -61,7 +98,20 @@ def calibrate_score(finding: Finding) -> int:
             raw = None  # malformed -> heuristic
     if raw is None:
         raw = _heuristic_score(finding)
-    raw = min(raw, _precondition_cap(len(finding.preconditions)))
+    return min(raw, _precondition_cap(finding.preconditions))
+
+
+def calibrate_score(finding: Finding) -> int:
+    """Compute the 1-10 risk score: derived score, floored by severity, then baseline cap.
+
+    Args:
+        finding: The finding to score.
+
+    Returns:
+        Int in ``[1, 10]``. Severity floor prevents rank inversion; an industry-standard-safe
+        finding is still capped low (baseline cap applied last).
+    """
+    raw = max(_derived_score(finding), _severity_floor(finding.severity))
     if _is_baseline_standard(finding):
         raw = min(raw, _BASELINE_CAP)
     return raw
@@ -91,20 +141,26 @@ def calibrate_findings(ws: Workspace) -> int:
     scored = 0
     for f in findings:
         if f.status is FindingStatus.CONFIRMED:
-            _attach_citations(f)  # F1: auto-attach ASVS/CodeGuard (no-op if already set)
-            f.risk_score = calibrate_score(f)
-            delta = inflation_delta(f, f.risk_score)
-            if delta >= _INFLATION_THRESHOLD and not any(
-                h.get("event") == "calibrate:severity-inflated" for h in f.history
-            ):
-                f.history.append({"event": "calibrate:severity-inflated",
-                                  "claimed": f.severity.value, "derived": f.risk_score,
-                                  "delta": delta})
-            if f.cvss_vector:
-                try:
-                    f.priority = offensive_priority(f.cvss_vector)
-                except ValueError:
-                    pass
+            try:
+                _attach_citations(f)  # F1: auto-attach ASVS/CodeGuard (no-op if already set)
+                derived = _derived_score(f)  # pre-floor: floor must not mask inflation
+                f.risk_score = max(derived, _severity_floor(f.severity))
+                if _is_baseline_standard(f):
+                    f.risk_score = min(f.risk_score, _BASELINE_CAP)
+                delta = inflation_delta(f, derived)
+                if delta >= _INFLATION_THRESHOLD and not any(
+                    h.get("event") == "calibrate:severity-inflated" for h in f.history
+                ):
+                    f.history.append({"event": "calibrate:severity-inflated",
+                                      "claimed": f.severity.value, "derived": derived,
+                                      "delta": delta})
+                if f.cvss_vector:
+                    try:
+                        f.priority = offensive_priority(f.cvss_vector)
+                    except ValueError:
+                        pass
+            except Exception as exc:  # noqa: BLE001 — per-finding isolation; one bad finding must not zero the batch
+                f.history.append({"event": "calibrate:error", "error": str(exc)})
             scored += 1
     if scored:
         write_findings(ws, findings)

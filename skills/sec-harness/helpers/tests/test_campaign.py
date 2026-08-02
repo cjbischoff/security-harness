@@ -62,3 +62,20 @@ def test_carry_forward_ignores_non_settled(tmp_path):
                 severity=Severity.HIGH, file="app.py", line=1, message="m"),
     ])
     assert carry_forward(ws, ["app.py"]) == {"staled": 0, "kept": 0}  # RAW not settled
+
+
+def test_promote_runtime_dependent(tmp_path):
+    from sec_harness.campaign import promote_runtime_dependent
+    from sec_harness.models import Finding, FindingStatus, Severity
+    from sec_harness.workspace import Workspace, read_findings, write_findings
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    def f(id_, rd, status=FindingStatus.RAW):
+        return Finding(id=id_, rule_id="r", cls="business-logic", status=status,
+                       severity=Severity.LOW, file="a.py", line=1, message="m",
+                       runtime_dependent=rd)
+    write_findings(ws, [f("A", True), f("B", False), f("C", True, FindingStatus.CONFIRMED)])
+    assert promote_runtime_dependent(ws) == 1                       # only the raw+rd one
+    by = {x.id: x.status for x in read_findings(ws)}
+    assert by["A"] is FindingStatus.NEEDS_DEPLOYMENT_TESTING
+    assert by["B"] is FindingStatus.RAW                             # not marked -> untouched
+    assert by["C"] is FindingStatus.CONFIRMED                       # already terminal -> untouched

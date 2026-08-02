@@ -19,7 +19,11 @@ untrusted envelope (`<untrusted nonce=...>`).
 - The phase output to challenge: the relevant `{{WORKSPACE}}/kb/*` artifact
   (`scan-profile.json` / `architecture.md` + `entities/` / `THREAT_MODEL.md` / `context.json`).
 - The deterministic pre-check result: `{{WORKSPACE}}/kb/gates/{{PHASE}}.json` — claims already
-  `reject`ed have unresolvable code refs; only review the `sent_to_adversary` claims.
+  `reject`ed have unresolvable code refs; only review the `sent_to_adversary` claims. The
+  `claims` map gives each sent-to-adversary claim's `text` + `refs`, and `decisions[]` carries
+  the same per claim. Your verdict table has one row per entry in `claims` (or per
+  `sent_to_adversary` id). For each, re-derive the claim from its `refs` in code (Read/ast-grep)
+  — do NOT trust the claim text; it is the producer's assertion to challenge.
 
 ## Allowed tools
 `rg`, file reads, directory listing, structural index CLI

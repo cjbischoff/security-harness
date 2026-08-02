@@ -60,6 +60,7 @@ _SETTLED = {FindingStatus.CONFIRMED, FindingStatus.FIXED, FindingStatus.REJECTED
 TERMINAL_STATUSES = {
     FindingStatus.CONFIRMED, FindingStatus.FIXED, FindingStatus.REJECTED,
     FindingStatus.DUPLICATE, FindingStatus.NEEDS_DEPLOYMENT_TESTING,
+    FindingStatus.INFORMATIONAL,
 }
 
 
@@ -88,6 +89,30 @@ def salvage_partial(ws: Workspace, agent_error: str, *, statuses=(FindingStatus.
     if salvaged:
         write_findings(ws, findings)
     return salvaged
+
+
+def promote_runtime_dependent(ws: Workspace) -> int:
+    """Promote raw findings marked runtime_dependent to needs-deployment-testing (O-010/O-021).
+
+    A finding whose only barrier to confirmation is data not in the repo (catalog, live host,
+    secret liveness) is a genuine runtime lead — it must reach the red-team plan, not die as raw.
+
+    Args:
+        ws: Workspace whose findings are promoted in place.
+
+    Returns:
+        The count of findings promoted.
+    """
+    findings = read_findings(ws)
+    n = 0
+    for f in findings:
+        if f.status is FindingStatus.RAW and f.runtime_dependent:
+            f.status = FindingStatus.NEEDS_DEPLOYMENT_TESTING
+            f.history.append({"event": "campaign:promoted-runtime-dependent"})
+            n += 1
+    if n:
+        write_findings(ws, findings)
+    return n
 
 
 def carry_forward(ws: Workspace, changed_files: list[str]) -> dict[str, int]:

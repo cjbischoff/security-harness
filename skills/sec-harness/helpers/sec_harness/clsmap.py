@@ -55,6 +55,17 @@ _RULE_ID_CLS: dict[str, str] = {
 }
 
 
+# Low-value vendored-rule classes: real code smells but not exploitable findings on their own
+# (O-030: xss/log-injection vendored rules ~100% FP on a real backend). Demoted to `informational`
+# rather than promoted to `raw`, so they don't flood the FP ladder. `unknown` = a hit with no CWE.
+NOISE_CLASSES: frozenset[str] = frozenset({"log-injection", "clear-text-logging", "unknown"})
+
+
+def is_noise_class(cls: str) -> bool:
+    """True if ``cls`` is a low-value vendored-rule class that should not enter the FP ladder as raw."""
+    return cls in NOISE_CLASSES
+
+
 def cls_from_rule_id(rule_id: str | None) -> str:
     """Map a rule id to an attack-class by high-confidence name substrings.
 

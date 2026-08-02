@@ -72,6 +72,10 @@ a true positive you silently filter here is gone for good.
      Do not delete it. Mere doubt without a cited control is NOT a rejection — keep it
      `raw` at low confidence (see Recall posture).
    - **Hallucinated** (fails Gate −1): do not write it at all.
+   - **Runtime-dependent**: if a finding is real in code but its exploitability can only be
+     settled with data NOT in the repo (catalog contents, a live host, whether a committed
+     secret is live), set `runtime_dependent: true` on the finding (keep `status: "raw"`).
+     Do not force it to a confident `raw` or drop it — the marker routes it to the runtime plan.
 6. Newly discovered issues (no existing candidate) get a fresh, class-prefixed id
    (see Output below). Existing candidates are updated IN PLACE by their id.
 
@@ -178,3 +182,7 @@ vs discarded as hallucinations, and the strongest finding's source→sink in one
   describe the composed capability in `message`. (Cross-finding chains over the whole
   confirmed set are the bug-chain phase's job; this is for a chain you see in one trace.)
 - No execution, ever. Static reasoning only.
+- A candidate already demoted to `informational` (noise class) is out of scope — do not
+  promote it to `raw`. If you find a concrete reachability-from-untrusted indicator for
+  the same code, WRITE IT AS A NEW finding under its real `cls` (per the shape-hunting
+  rule above) — never reopen the informational finding itself.

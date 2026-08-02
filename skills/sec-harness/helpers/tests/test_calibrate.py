@@ -59,21 +59,125 @@ def _crit(cvss, preconds):
                    cvss_vector=cvss, preconditions=preconds)
 
 
+def test_precondition_weight_ignores_free_preconditions():
+    from sec_harness.calibrate import _precondition_weight
+    # unauthenticated / no-config / public are NOT mitigants -> weight 0
+    assert _precondition_weight(
+        ["unauthenticated buyer reaching checkout", "no config required", "public endpoint"]
+    ) == 0.0
+    # a real barrier counts; "unauth" containing "auth" must not misclassify as weak
+    assert _precondition_weight(["requires admin token"]) == 1.0
+    assert _precondition_weight(["authenticated low-priv user"]) == 0.5
+
+
+def test_precondition_weight_default_config_vs_non_default_config():
+    from sec_harness.calibrate import _precondition_weight
+    # "default config" (ships vulnerable out of the box) is a FREE substring of the STRONG
+    # "non-default config" (requires a non-default setting) -- both directions must classify
+    # correctly despite the substring collision.
+    assert _precondition_weight(["default config"]) == 0.0
+    assert _precondition_weight(["non-default config"]) == 1.0
+
+
+def test_precondition_cap_uses_weight_not_count():
+    from sec_harness.calibrate import _precondition_cap
+    # three FREE preconditions -> weight 0 -> no cap (was: count 3 -> cap 5)
+    assert _precondition_cap(["unauthenticated", "remote", "no setup"]) == 10
+    # one strong barrier -> weight 1 -> cap 8
+    assert _precondition_cap(["requires admin token"]) == 8
+    # two strong -> weight 2 -> cap 7
+    assert _precondition_cap(["requires admin token", "non-default config"]) == 7
+    # three strong -> weight 3 -> cap 5
+    assert _precondition_cap(["admin", "non-default config", "local access"]) == 5
+
+
 def test_precondition_cap_lowers_score():
     crit_vec = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"  # 9.8 -> 10
-    assert calibrate_score(_crit(crit_vec, [])) == 10             # 0 preconds -> no cap
-    assert calibrate_score(_crit(crit_vec, ["auth"])) == 8        # 1 -> cap 8
-    assert calibrate_score(_crit(crit_vec, ["auth", "cfg"])) == 7  # 2 -> cap 7
-    assert calibrate_score(_crit(crit_vec, ["auth", "cfg", "local"])) == 5  # 3+ -> cap 5
+    assert calibrate_score(_crit(crit_vec, [])) == 10                       # weight 0 -> no cap
+    assert calibrate_score(_crit(crit_vec, ["unauthenticated"])) == 10      # free -> no cap
+    strong_preconds = ["requires admin token", "non-default config", "local access"]
+    assert calibrate_score(_crit(crit_vec, strong_preconds)) == 8  # weight 3 -> cap 5, floored 8
+
+
+def _sev(id_, sev, cvss, preconds):
+    from sec_harness.models import Finding, FindingStatus
+    return Finding(id=id_, rule_id="r", cls="authz", status=FindingStatus.CONFIRMED,
+                   severity=sev, file="a.py", line=1, message="m",
+                   cvss_vector=cvss, preconditions=preconds)
+
+
+def test_critical_never_ranks_below_medium():
+    # O-031: NoSQL-ATO critical (3 free preconds) must outrank a committed-secret medium.
+    from sec_harness.models import Severity
+    crit = _sev("C-CRIT", Severity.CRITICAL, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+                ["unauthenticated", "extended query parsing", "route wiring"])
+    med = _sev("C-MED", Severity.MEDIUM, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:H/A:N",
+               ["secret is live/unrotated"])
+    assert calibrate_score(crit) >= 8            # severity floor for critical
+    assert calibrate_score(crit) > calibrate_score(med)
+
+
+def test_severity_floor_values():
+    from sec_harness.calibrate import _severity_floor
+    from sec_harness.models import Severity
+    assert _severity_floor(Severity.CRITICAL) == 8
+    assert _severity_floor(Severity.HIGH) == 6
+    assert _severity_floor(Severity.MEDIUM) == 4
+    assert _severity_floor(Severity.LOW) == 2
 
 
 def test_inflation_flag_recorded(tmp_path):
-    # CRITICAL claimed (base 9) but 3 preconditions cap the derived score to 5 -> delta 4.
+    # CRITICAL claimed (base 9) but strong preconditions derive a pre-floor score of 5 -> delta 4;
+    # risk_score is floored to 8 for ordering, but the inflation advisory still fires off pre-floor.
     ws = Workspace(tmp_path / "ws"); ws.ensure()
     write_findings(ws, [_crit("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                               ["auth", "cfg", "local"])])
+                              ["requires admin token", "non-default config", "local access"])])
     calibrate_findings(ws)
     f = read_findings(ws)[0]
-    assert f.risk_score == 5
+    assert f.risk_score == 8                       # floored (ordering)
     events = [h for h in f.history if h.get("event") == "calibrate:severity-inflated"]
-    assert len(events) == 1 and events[0]["delta"] == 4
+    assert len(events) == 1 and events[0]["delta"] == 4   # 9 (claimed) - 5 (pre-floor derived)
+
+
+def test_cluster_a_acceptance_ordering(tmp_path):
+    """A confirmed critical needs-runtime finding outranks a medium AND enters the plan."""
+    from sec_harness.redteam import discriminate
+    crit = Finding(id="AUTHZ-0001", rule_id="r", cls="authz",
+                   status=FindingStatus.CONFIRMED, severity=Severity.CRITICAL,
+                   file="orders.js", line=87, message="unauth order cancel",
+                   cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:H/A:H",
+                   preconditions=["unauthenticated", "knows order id"],
+                   runtime_disposition="needs-runtime")
+    med = Finding(id="SECRETS-0002", rule_id="r", cls="secrets",
+                  status=FindingStatus.CONFIRMED, severity=Severity.MEDIUM,
+                  file=".env.example", line=23, message="committed secret",
+                  cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:H/A:N",
+                  preconditions=["secret is live"], runtime_disposition="needs-runtime")
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    write_findings(ws, [crit, med])
+    calibrate_findings(ws)
+    by_id = {f.id: f for f in read_findings(ws)}
+    crit_score = by_id["AUTHZ-0001"].risk_score
+    med_score = by_id["SECRETS-0002"].risk_score
+    assert crit_score is not None and med_score is not None
+    assert crit_score >= med_score                           # critical never below medium
+    assert crit_score >= 8
+    disc = discriminate(read_findings(ws), min_risk=7)
+    assert "AUTHZ-0001" == disc["needs_runtime"][0].id       # critical ranks first in the plan
+
+
+def test_malformed_cvss_does_not_crash_batch(tmp_path):
+    # O-029: one finding with an invalid metric must NOT zero the others; it falls back to heuristic.
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    good = Finding(id="G", rule_id="r", cls="sqli", status=FindingStatus.CONFIRMED,
+                   severity=Severity.HIGH, file="a.py", line=1, message="m",
+                   dataflow=["a @ x:1", "-> b @ x:2"])
+    bad = Finding(id="B", rule_id="r", cls="secrets", status=FindingStatus.CONFIRMED,
+                  severity=Severity.MEDIUM, file="a.py", line=2, message="m",
+                  cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:M/I:H/A:N")
+    write_findings(ws, [good, bad])
+    n = calibrate_findings(ws)                 # must not raise
+    assert n == 2
+    by_id = {f.id: f for f in read_findings(ws)}
+    assert by_id["G"].risk_score == 9          # good finding scored normally
+    assert by_id["B"].risk_score is not None    # bad-vector finding fell back to heuristic, not crash
