@@ -231,3 +231,34 @@ def control_findings(ctx: Context, discovery_sha: str | None = None) -> list:
                       "verify_status": i.verify_status, "source_doc": i.source_doc}],
         ))
     return out
+
+
+def manual_review_findings(ctx: Context, discovery_sha: str | None = None) -> list:
+    """Turn attack-lead context items into NEEDS_DEPLOYMENT_TESTING findings (O-020).
+
+    A repo doc's attack lead (e.g. "CI deploy-token reachable via webhook") is not a
+    tool-confirmed finding, but it is a real lead a human should chase — dropping it
+    silently loses signal. Carrying it as a finding gets it into the red-team plan's
+    manual test section instead of vanishing after context ingestion.
+
+    Args:
+        ctx: The ingested context (``attack_lead`` items).
+        discovery_sha: Git SHA to stamp on the LEAD findings.
+
+    Returns:
+        A list of :class:`sec_harness.models.Finding` in NEEDS_DEPLOYMENT_TESTING
+        status, id ``LEAD-####``.
+    """
+    from sec_harness.models import Finding, FindingStatus, Severity
+
+    out = []
+    for n, i in enumerate(ctx.of_kind("attack_lead"), start=1):
+        file, line = _split_where(i.where)
+        out.append(Finding(
+            id=f"LEAD-{n:04d}", rule_id="context:attack-lead", cls="manual-review",
+            status=FindingStatus.NEEDS_DEPLOYMENT_TESTING, severity=Severity.MEDIUM,
+            file=file, line=line, message=i.text,
+            evidence_sources=["llm-claimed:doc-lead"], discovery_sha=discovery_sha,
+            history=[{"event": "context:attack-lead", "source_doc": i.source_doc}],
+        ))
+    return out

@@ -7,6 +7,7 @@ from sec_harness.context import (
     discover_context_files,
     hunt_rows,
     load,
+    manual_review_findings,
     render_markdown,
     save,
 )
@@ -88,3 +89,19 @@ def test_control_findings_only_for_unenforced():
 def test_verify_status_validation():
     bad = Context(items=[ContextItem(kind="claimed_control", text="x", verify_status="NOPE")])
     assert any("verify_status" in e for e in bad.validate())
+
+
+def test_manual_review_findings_from_attack_leads():
+    c = Context(items=[
+        ContextItem(kind="attack_lead", cls="ssrf", text="CI deploy-token reachable via webhook",
+                    where="internal/ci/deploy.go:88", source_doc="docs/ci.md"),
+    ])
+    findings = manual_review_findings(c, discovery_sha="abc")
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.id == "LEAD-0001"
+    assert f.status is FindingStatus.NEEDS_DEPLOYMENT_TESTING
+    assert f.cls == "manual-review"
+    assert f.evidence_sources == ["llm-claimed:doc-lead"]
+    assert f.file == "internal/ci/deploy.go" and f.line == 88
+    assert f.discovery_sha == "abc"
