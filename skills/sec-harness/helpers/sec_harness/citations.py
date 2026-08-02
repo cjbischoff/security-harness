@@ -50,7 +50,7 @@ CLASS_CODEGUARD: dict[str, str] = {
     "ssrf": "codeguard-0-api-web-services",
     "webhook-verification": "codeguard-0-api-web-services",
     "cache-poisoning": "codeguard-0-api-web-services",
-    "secrets": "codeguard-1-hardcoded-credentials",
+    "secrets": "codeguard-0-cryptography",
 }
 
 
