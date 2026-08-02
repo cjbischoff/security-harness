@@ -5,9 +5,10 @@ from sec_harness.redteam import discriminate, render_plan, write_plan
 from sec_harness.workspace import Workspace, write_findings
 
 
-def _f(fid, status=FindingStatus.CONFIRMED, risk=8, disposition=None, runtime_test=None):
+def _f(fid, status=FindingStatus.CONFIRMED, risk=8, disposition=None, runtime_test=None,
+       severity=Severity.HIGH):
     return Finding(
-        id=fid, rule_id="r", cls="authz", status=status, severity=Severity.HIGH,
+        id=fid, rule_id="r", cls="authz", status=status, severity=severity,
         file="app/x.py", line=10, message=f"{fid} msg", risk_score=risk,
         runtime_disposition=disposition, runtime_test=runtime_test,
         evidence_sources=["semgrep:rule"],
@@ -18,7 +19,8 @@ def test_discriminate_partitions():
     findings = [
         _f("A", disposition="needs-runtime", risk=9),                    # -> plan
         _f("B", disposition="static-settled", risk=9),                   # -> static
-        _f("C", disposition="needs-runtime", risk=3),                    # -> below bar
+        # low severity + below-bar risk -> below_bar (high/medium/critical are always actionable)
+        _f("C", disposition="needs-runtime", risk=3, severity=Severity.LOW),
         _f("D", status=FindingStatus.NEEDS_DEPLOYMENT_TESTING, risk=8),  # -> plan (ndt)
         _f("E", status=FindingStatus.REJECTED, risk=9),                  # ignored
     ]
@@ -60,3 +62,25 @@ def test_write_plan(tmp_path):
     result = write_plan(ws, min_risk=7)
     assert result["needs_runtime"] == 1
     assert (ws.reports / "redteam-plan.md").exists()
+
+
+def _rt(id_, sev, risk, disp="needs-runtime", status=None):
+    return Finding(id=id_, rule_id="r", cls="authz",
+                   status=status or FindingStatus.CONFIRMED, severity=sev,
+                   file="a.py", line=1, message="m", risk_score=risk,
+                   runtime_disposition=disp)
+
+
+def test_confirmed_high_severity_needs_runtime_is_actionable_below_min_risk():
+    # critical needs-runtime with risk 5 (below the 7 bar) MUST still be a directive (O-016/O-031).
+    crit = _rt("A-1", Severity.CRITICAL, 5)
+    disc = discriminate([crit], min_risk=7)
+    assert [f.id for f in disc["needs_runtime"]] == ["A-1"]
+    assert disc["below_bar"] == []
+
+
+def test_low_severity_needs_runtime_gated_by_min_risk():
+    low = _rt("A-2", Severity.LOW, 4)
+    disc = discriminate([low], min_risk=7)
+    assert [f.id for f in disc["below_bar"]] == ["A-2"]
+    assert disc["needs_runtime"] == []

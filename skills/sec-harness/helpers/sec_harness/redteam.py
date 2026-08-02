@@ -17,16 +17,28 @@ import argparse
 import json
 
 from sec_harness.evidence import is_tool_receipt
-from sec_harness.models import Finding, FindingStatus
+from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.workspace import Workspace, load_paths, read_findings
 
 DEFAULT_MIN_RISK = 7
 _REPORTABLE = {FindingStatus.CONFIRMED, FindingStatus.FIXED}
+_ACTIONABLE_SEVERITIES = {Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM}
 
 
 def wants_runtime(f: Finding) -> bool:
     """True if a finding's exploitability can only be settled by testing the running system."""
     return f.runtime_disposition == "needs-runtime" or f.status is FindingStatus.NEEDS_DEPLOYMENT_TESTING
+
+
+def _above_bar(f: Finding, min_risk: int) -> bool:
+    """A needs-runtime finding is actionable if its severity is >= medium, else gated by min_risk.
+
+    Fixes O-016/O-031: min_risk can no longer hide a confirmed critical/high whose deterministic
+    risk_score sits low.
+    """
+    if f.severity in _ACTIONABLE_SEVERITIES:
+        return True
+    return (f.risk_score or 0) >= min_risk
 
 
 def discriminate(findings: list[Finding], min_risk: int = DEFAULT_MIN_RISK) -> dict:
@@ -52,7 +64,7 @@ def discriminate(findings: list[Finding], min_risk: int = DEFAULT_MIN_RISK) -> d
         if not (is_reportable or is_ndt):
             continue
         if wants_runtime(f):
-            (plan if (f.risk_score or 0) >= min_risk else below_bar).append(f)
+            (plan if _above_bar(f, min_risk) else below_bar).append(f)
         else:
             static_settled.append(f)
 
