@@ -53,3 +53,17 @@ def test_build_tier1_emits_nodes_and_call_edge():
         and e.dst == "app/db.py:1:run_query"
         for e in graph.edges
     )
+
+
+def test_attach_facts_tags_sources():
+    graph = g.Graph(1, "s", ["tier-1"], [], [], [], [])
+    g.attach_facts(
+        graph,
+        dependencies=[{"detail": "requests==2.0 CVE-x", "node_id": None}],
+        secrets=[{"detail": "aws key", "node_id": "a.py:3:k"}],
+        crypto=[{"detail": "md5 usage", "node_id": "b.py:9:hash"}],
+    )
+    by_source = {f.source: f for f in graph.facts}
+    assert by_source["sca"].kind == "dependency"
+    assert by_source["secrets"].node_id == "a.py:3:k"
+    assert by_source["crypto-policy"].detail == "md5 usage"

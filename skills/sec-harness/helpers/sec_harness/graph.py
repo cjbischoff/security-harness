@@ -183,3 +183,29 @@ def build_tier1(target_root: str | Path, sha: str) -> Graph:
                     edges.append(Edge(node_id, dst, "calls"))
 
     return Graph(1, sha, ["tier-1"], [], nodes, edges, [])
+
+
+def attach_facts(
+    graph: Graph,
+    *,
+    dependencies: list[dict] | None = None,
+    secrets: list[dict] | None = None,
+    crypto: list[dict] | None = None,
+) -> None:
+    """Attach dependency/secret/crypto facts to ``graph`` in place.
+
+    Args:
+        graph: The substrate to enrich.
+        dependencies: ``{"detail", "node_id"}`` dicts from the SCA/OSV scan.
+        secrets: ``{"detail", "node_id"}`` dicts from the secrets scan.
+        crypto: ``{"detail", "node_id"}`` dicts from the crypto-policy check.
+    """
+    for kind, source, rows in (
+        ("dependency", "sca", dependencies or []),
+        ("secret", "secrets", secrets or []),
+        ("crypto", "crypto-policy", crypto or []),
+    ):
+        for row in rows:
+            graph.facts.append(
+                Fact(kind, row["detail"], source, row.get("node_id"))
+            )
