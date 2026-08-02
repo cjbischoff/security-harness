@@ -178,3 +178,17 @@ def test_cli_query_reaches(tmp_path, capsys):
                  "--src", "app/api.py:4:handler", "--dst", "app/db.py:1:run_query"])
     assert rc == 0
     assert "true" in capsys.readouterr().out.lower()
+
+
+def test_build_and_write_tier1_attaches_injected_facts(tmp_path):
+    ws = _ws(tmp_path)
+    path = g.build_and_write_tier1(
+        ws, FIXTURE, sha="x",
+        sca_fn=lambda root: [{"detail": "dep CVE", "node_id": None}],
+        secrets_fn=lambda root: [],
+        crypto_fn=lambda root: [{"detail": "md5", "node_id": None}],
+    )
+    assert path == ws.kb / "graph.json"
+    loaded = g.load_graph(ws)
+    sources = {f.source for f in loaded.facts}
+    assert "sca" in sources and "crypto-policy" in sources

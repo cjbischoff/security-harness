@@ -372,6 +372,42 @@ def merge_tier2(graph: Graph, candidates: list, taint_langs: list[str]) -> None:
     graph.taint_langs = sorted(set(graph.taint_langs) | set(taint_langs))
 
 
+def build_and_write_tier1(
+    ws,
+    target_root: str | Path,
+    sha: str,
+    *,
+    sca_fn=None,
+    secrets_fn=None,
+    crypto_fn=None,
+) -> Path:
+    """Build the Tier-1 substrate with facts attached and persist it.
+
+    LLM-free convenience for the pre-recon orchestration step. Tool functions are
+    injected (each returns a list of ``{"detail", "node_id"}`` dicts); a missing tool is
+    represented by a no-op returning ``[]`` so the substrate still builds.
+
+    Args:
+        ws: Target workspace.
+        target_root: Repo root to index.
+        sha: Pinned commit sha.
+        sca_fn: Callable ``(root) -> list[dict]`` of dependency facts.
+        secrets_fn: Callable ``(root) -> list[dict]`` of secret facts.
+        crypto_fn: Callable ``(root) -> list[dict]`` of crypto facts.
+
+    Returns:
+        The path to the written ``kb/graph.json``.
+    """
+    graph = build_tier1(target_root, sha)
+    attach_facts(
+        graph,
+        dependencies=(sca_fn or (lambda _root: []))(target_root),
+        secrets=(secrets_fn or (lambda _root: []))(target_root),
+        crypto=(crypto_fn or (lambda _root: []))(target_root),
+    )
+    return save_graph(ws, graph)
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI for the evidence substrate (build / query).
 
