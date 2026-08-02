@@ -14,10 +14,16 @@ navigation only. Tier-2 (post-prefilter) merges CodeQL/semgrep taint dataflow ed
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from sec_harness import structural_index
+
 NO_PATH_RECEIPT = "structural-index:no-path"
+
+_SOURCE_EXTS = {".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".java",
+                ".c", ".cc", ".cpp", ".rb", ".php"}
 
 
 @dataclass
@@ -122,3 +128,58 @@ def load_graph(ws) -> Graph:
         The parsed :class:`Graph`.
     """
     return Graph.from_dict(json.loads((ws.kb / "graph.json").read_text()))
+
+
+def _lang_of(path: str) -> str:
+    """Return the language tag (extension without dot) for ``path``."""
+    suffix = Path(path).suffix
+    return suffix[1:] if suffix else ""
+
+
+def build_tier1(target_root: str | Path, sha: str) -> Graph:
+    """Assemble the Tier-1 substrate: definition nodes + one-hop call/import edges.
+
+    LLM-free. Uses :mod:`sec_harness.structural_index` for definitions and a
+    name-reference heuristic for call edges. Edges are approximate (heuristic, not
+    compiler-grade) and used for positive corroboration and navigation only.
+
+    Args:
+        target_root: Repo root to index.
+        sha: The pinned commit sha to stamp on the graph.
+
+    Returns:
+        A version-1 :class:`Graph` with ``tiers=["tier-1"]`` and no taint edges.
+    """
+    root = Path(target_root)
+    nodes: list[Node] = []
+    by_name: dict[str, list[str]] = {}
+    bodies: list[tuple[str, str, int, int]] = []  # (node_id, file, start, end)
+
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix not in _SOURCE_EXTS:
+            continue
+        rel = path.relative_to(root).as_posix()
+        for name, line in structural_index.list_definitions(path):
+            node_id = f"{rel}:{line}:{name}"
+            nodes.append(Node(node_id, "symbol", rel, line, name,
+                              {"lang": _lang_of(rel), "unresolvable": False}))
+            by_name.setdefault(name, []).append(node_id)
+            start, end = structural_index.get_function_boundary(path, line)
+            bodies.append((node_id, str(path), start, end))
+
+    edges: list[Edge] = []
+    seen: set[tuple[str, str, str]] = set()
+    for node_id, abspath, start, end in bodies:
+        text = "\n".join(Path(abspath).read_text().splitlines()[start:end])
+        for callee_name, targets in by_name.items():
+            if not re.search(r"\b" + re.escape(callee_name) + r"\s*\(", text):
+                continue
+            for dst in targets:
+                if dst == node_id:
+                    continue
+                key = (node_id, dst, "calls")
+                if key not in seen:
+                    seen.add(key)
+                    edges.append(Edge(node_id, dst, "calls"))
+
+    return Graph(1, sha, ["tier-1"], [], nodes, edges, [])

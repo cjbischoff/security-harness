@@ -31,3 +31,25 @@ def test_save_and_load_graph(tmp_path):
     path = g.save_graph(ws, graph)
     assert path == ws.kb / "graph.json"
     assert g.load_graph(ws) == graph
+
+
+FIXTURE = Path(__file__).parent / "fixtures" / "graph_target"
+
+
+def test_build_tier1_emits_nodes_and_call_edge():
+    graph = g.build_tier1(FIXTURE, sha="deadbeef")
+    assert graph.version == 1
+    assert graph.tiers == ["tier-1"]
+    ids = {n.id for n in graph.nodes}
+    assert "app/api.py:4:handler" in ids
+    assert "app/db.py:1:run_query" in ids
+    handler_node = graph.node("app/api.py:4:handler")
+    assert handler_node is not None
+    assert handler_node.attrs["lang"] == "py"
+    # handler() calls run_query() -> a call edge exists between the two nodes
+    assert any(
+        e.kind == "calls"
+        and e.src == "app/api.py:4:handler"
+        and e.dst == "app/db.py:1:run_query"
+        for e in graph.edges
+    )
