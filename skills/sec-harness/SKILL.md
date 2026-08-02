@@ -173,7 +173,10 @@ Run AFTER the KB build. Prerequisites in the workspace: `kb/scan-profile.json`,
    `uv run python -m sec_harness.cli scan --target <T> --workspace <WS> --config <rules> --sha <sha>`
 2. **Investigate** (model: sonnet, PARALLEL): partition candidates first —
    `partition_candidates_by_class(ws)` (from `sec_harness.partition`) groups them
-   by `cls`. Then dispatch the investigate subagents **in ONE message** — one per
+   by `cls`. Investigate runs whenever `must_investigate(profile)` is true (any
+   planned class) — even at 0 SAST candidates. A 0-candidate business-logic repo
+   is a coverage story, not a clean bill (O-007). Then dispatch the investigate
+   subagents **in ONE message** — one per
    class in `scan-profile.json` `agents_to_spawn`, each with `agents/investigate.md`
    (substituting `{{ATTACK_CLASS}}`, `{{TARGET}}`, `{{WORKSPACE}}`) and handed its
    partition — so they run concurrently.

@@ -77,3 +77,18 @@ def test_reconcile_plan_skips_class_with_no_live_candidates(tmp_path):
     write_findings(ws, [c("C-1", "ssrf", FindingStatus.CONFIRMED)])   # settled, no live candidates
     out = reconcile_plan(ws, ["authz"])
     assert "ssrf" not in out   # already-settled class not re-routed on a multi-pass run
+
+
+def test_must_investigate_true_when_classes_exist_even_at_zero_candidates():
+    from typing import ClassVar
+
+    from sec_harness.partition import must_investigate
+
+    class P:
+        agents_to_spawn: ClassVar = ["business-logic"]
+
+    class Q:
+        agents_to_spawn: ClassVar = []
+
+    assert must_investigate(P()) is True     # 0 candidates but a hunt-list class exists -> must run
+    assert must_investigate(Q()) is False

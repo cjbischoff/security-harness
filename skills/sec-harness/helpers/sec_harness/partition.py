@@ -93,3 +93,18 @@ def reconcile_plan(ws: Workspace, agents_to_spawn: list[str]) -> list[str]:
         and any(f.status is FindingStatus.CANDIDATE for f in fs)
     )
     return list(agents_to_spawn) + extra
+
+
+def must_investigate(profile) -> bool:
+    """Investigate MUST run when the profile plans any class, EVEN at 0 SAST candidates (O-007).
+
+    A business-logic target is SAST-empty but not risk-free; gating investigate on candidate
+    existence is a signal inversion. The hunt list drives investigation regardless of candidates.
+
+    Args:
+        profile: A ``ScanProfile``-shaped object exposing ``agents_to_spawn``.
+
+    Returns:
+        ``True`` if the profile planned any attack-class agent, ``False`` otherwise.
+    """
+    return bool(getattr(profile, "agents_to_spawn", []) or [])
