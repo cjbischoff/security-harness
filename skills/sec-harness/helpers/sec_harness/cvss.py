@@ -63,10 +63,13 @@ def cvss31_base(vector: str) -> tuple[float, str]:
         ValueError: If the vector is missing required base metrics.
     """
     m = _parse(vector)
-    scope_changed = m["S"] == "C"
-    pr = (_PR_C if scope_changed else _PR_U)[m["PR"]]
-    exploitability = 8.22 * _AV[m["AV"]] * _AC[m["AC"]] * pr * _UI[m["UI"]]
-    iss = 1 - (1 - _CIA[m["C"]]) * (1 - _CIA[m["I"]]) * (1 - _CIA[m["A"]])
+    try:
+        scope_changed = m["S"] == "C"
+        pr = (_PR_C if scope_changed else _PR_U)[m["PR"]]
+        exploitability = 8.22 * _AV[m["AV"]] * _AC[m["AC"]] * pr * _UI[m["UI"]]
+        iss = 1 - (1 - _CIA[m["C"]]) * (1 - _CIA[m["I"]]) * (1 - _CIA[m["A"]])
+    except KeyError as e:
+        raise ValueError(f"invalid or missing CVSS 3.1 metric {e}") from e
     if scope_changed:
         impact = 7.52 * (iss - 0.029) - 3.25 * (iss - 0.02) ** 15
     else:
