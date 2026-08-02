@@ -160,3 +160,21 @@ def test_merge_tier2_ignores_non_taint_candidates():
     cand = _candidate(evidence_sources=["llm-claimed:sqli"])
     g.merge_tier2(graph, [cand], taint_langs=["py"])
     assert not any(e.kind == "taint" for e in graph.edges)
+
+
+def test_cli_build_writes_graph(tmp_path):
+    ws_root = tmp_path / "ws"
+    rc = g.main(["build", "--target", str(FIXTURE),
+                 "--workspace", str(ws_root), "--sha", "cafe"])
+    assert rc == 0
+    assert (ws_root / "kb" / "graph.json").exists()
+
+
+def test_cli_query_reaches(tmp_path, capsys):
+    ws_root = tmp_path / "ws"
+    g.main(["build", "--target", str(FIXTURE),
+            "--workspace", str(ws_root), "--sha", "cafe"])
+    rc = g.main(["query", "--workspace", str(ws_root), "--kind", "reaches",
+                 "--src", "app/api.py:4:handler", "--dst", "app/db.py:1:run_query"])
+    assert rc == 0
+    assert "true" in capsys.readouterr().out.lower()

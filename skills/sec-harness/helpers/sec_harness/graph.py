@@ -13,6 +13,7 @@ navigation only. Tier-2 (post-prefilter) merges CodeQL/semgrep taint dataflow ed
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 from collections import deque
@@ -20,6 +21,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from sec_harness import structural_index
+from sec_harness.workspace import Workspace
 
 NO_PATH_RECEIPT = "structural-index:no-path"
 
@@ -368,3 +370,51 @@ def merge_tier2(graph: Graph, candidates: list, taint_langs: list[str]) -> None:
     if "tier-2" not in graph.tiers:
         graph.tiers.append("tier-2")
     graph.taint_langs = sorted(set(graph.taint_langs) | set(taint_langs))
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI for the evidence substrate (build / query).
+
+    Args:
+        argv: Optional argument vector.
+
+    Returns:
+        Process exit code.
+    """
+    parser = argparse.ArgumentParser(prog="sec-harness-graph")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    b = sub.add_parser("build", help="Build the Tier-1 substrate.")
+    b.add_argument("--target", required=True)
+    b.add_argument("--workspace", required=True)
+    b.add_argument("--sha", required=True)
+
+    q = sub.add_parser("query", help="Query the persisted substrate.")
+    q.add_argument("--workspace", required=True)
+    q.add_argument("--kind", required=True, choices=["reaches", "no-path"])
+    q.add_argument("--src", required=True)
+    q.add_argument("--dst", required=True)
+
+    args = parser.parse_args(argv)
+    if args.cmd == "build":
+        ws = Workspace(root=Path(args.workspace))
+        ws.ensure()
+        graph = build_tier1(args.target, args.sha)
+        save_graph(ws, graph)
+        print(f"nodes={len(graph.nodes)} edges={len(graph.edges)}")
+        return 0
+    if args.cmd == "query":
+        ws = Workspace(root=Path(args.workspace))
+        graph = load_graph(ws)
+        if args.kind == "reaches":
+            print(str(reaches(graph, args.src, args.dst)).lower())
+        else:
+            result = no_path(graph, args.src, args.dst)
+            print(f"answer={str(result.answer).lower()} "
+                  f"provable={str(result.provable).lower()} receipt={result.receipt}")
+        return 0
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
