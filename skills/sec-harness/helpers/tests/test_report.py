@@ -51,6 +51,21 @@ def test_select_reportable_filters_and_sorts():
     assert [f.id for f in out] == ["F-0002", "F-0001"]  # rejected/candidate dropped; risk-sorted
 
 
+def test_report_renders_coverage_section(tmp_path):
+    import json
+
+    from sec_harness.workspace import Workspace
+
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    (ws.kb / "coverage.json").write_text(json.dumps({
+        "languages": [{"language": "liquid", "files": 194, "tier": "none"},
+                      {"language": "javascript", "files": 40, "tier": "dataflow"}],
+        "dataflow_pct": 17, "uncovered": ["liquid"]}))
+    write_report(ws)
+    md = ws.report_path.read_text()
+    assert "Coverage" in md and "liquid" in md and "17%" in md
+
+
 def test_write_report_writes_final_artifacts(tmp_path):
     import json
 
