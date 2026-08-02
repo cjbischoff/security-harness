@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from sec_harness import graph as g
+from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.workspace import Workspace
 
 
@@ -133,3 +134,29 @@ def test_no_path_finds_taint_path_under_coverage():
     assert result.answer is False
     assert result.provable is True
     assert result.receipt is None
+
+
+def _candidate(file: str = "b.py", line: int = 1,
+                evidence_sources: list[str] | None = None) -> Finding:
+    return Finding(
+        id="F-1", rule_id="r", cls="sqli", status=FindingStatus.CANDIDATE,
+        severity=Severity.HIGH, file=file, line=line, message="t",
+        evidence_sources=evidence_sources or ["codeql:dataflow"],
+    )
+
+
+def test_merge_tier2_adds_taint_edge_and_bumps_version():
+    graph = g.build_tier1(FIXTURE, sha="x")
+    cand = _candidate(file="app/db.py", line=1)
+    g.merge_tier2(graph, [cand], taint_langs=["py"])
+    assert graph.version == 2
+    assert "tier-2" in graph.tiers
+    assert graph.taint_langs == ["py"]
+    assert any(e.kind == "taint" for e in graph.edges)
+
+
+def test_merge_tier2_ignores_non_taint_candidates():
+    graph = g.build_tier1(FIXTURE, sha="x")
+    cand = _candidate(evidence_sources=["llm-claimed:sqli"])
+    g.merge_tier2(graph, [cand], taint_langs=["py"])
+    assert not any(e.kind == "taint" for e in graph.edges)

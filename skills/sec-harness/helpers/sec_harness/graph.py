@@ -322,3 +322,49 @@ def no_path(graph: Graph, source: str, sink: str, *, max_depth: int = 12) -> NoP
     provable = covered
     receipt = NO_PATH_RECEIPT if (answer and provable) else None
     return NoPathResult(answer=answer, provable=provable, receipt=receipt)
+
+
+def _taint_receipt(sources: list[str]) -> bool:
+    """True if any evidence source is a taint-dataflow receipt (codeql/semgrep)."""
+    for s in sources:
+        if s.startswith("codeql:") and "dataflow" in s:
+            return True
+        if s.startswith("semgrep:"):
+            return True
+    return False
+
+
+def _ensure_node(graph: Graph, node_id: str, kind: str, file: str, line: int) -> None:
+    """Add a node with ``node_id`` if the graph does not already contain it."""
+    if graph.node(node_id) is None:
+        graph.nodes.append(
+            Node(node_id, kind, file, line, node_id.rsplit(":", 1)[-1],
+                 {"lang": _lang_of(file), "unresolvable": False})
+        )
+
+
+def merge_tier2(graph: Graph, candidates: list, taint_langs: list[str]) -> None:
+    """Merge CodeQL/semgrep taint dataflow edges into the substrate (Tier-2).
+
+    Args:
+        graph: The Tier-1 substrate to upgrade in place.
+        candidates: Prefilter candidates (``Finding``); only those with a taint receipt
+            contribute a taint edge.
+        taint_langs: Languages CodeQL/semgrep taint actually ran for. Sets the honesty
+            gate for :func:`no_path`.
+    """
+    for cand in candidates:
+        sources = list(getattr(cand, "evidence_sources", []) or [])
+        if not _taint_receipt(sources):
+            continue
+        sink_id = f"{cand.file}:{cand.line}:{cand.file.rsplit('/', 1)[-1]}"
+        src_file = f"external:{cand.file}"
+        src_id = f"{src_file}:0:external"
+        _ensure_node(graph, sink_id, "sink", cand.file, cand.line)
+        _ensure_node(graph, src_id, "source", cand.file, 0)
+        graph.edges.append(Edge(src_id, sink_id, "taint"))
+
+    graph.version = max(graph.version, 2)
+    if "tier-2" not in graph.tiers:
+        graph.tiers.append("tier-2")
+    graph.taint_langs = sorted(set(graph.taint_langs) | set(taint_langs))
