@@ -82,11 +82,14 @@ def reconcile_plan(ws: Workspace, agents_to_spawn: list[str]) -> list[str]:
 
     Returns:
         ``agents_to_spawn`` followed by any additional real-security classes present
-        among candidates, sorted. Never removes a planned class.
+        among candidates, sorted. Never removes a planned class. Only adds a class
+        with at least one live CANDIDATE finding — a class whose findings already
+        settled (confirmed/rejected/stale on a later pass) is not re-routed.
     """
     parts = partition_candidates_by_class(ws)
     extra = sorted(
-        cls for cls in parts
+        cls for cls, fs in parts.items()
         if cls not in agents_to_spawn and cls != "deps" and not is_noise_class(cls)
+        and any(f.status is FindingStatus.CANDIDATE for f in fs)
     )
     return list(agents_to_spawn) + extra
