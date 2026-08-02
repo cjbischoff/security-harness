@@ -60,6 +60,7 @@ _SETTLED = {FindingStatus.CONFIRMED, FindingStatus.FIXED, FindingStatus.REJECTED
 TERMINAL_STATUSES = {
     FindingStatus.CONFIRMED, FindingStatus.FIXED, FindingStatus.REJECTED,
     FindingStatus.DUPLICATE, FindingStatus.NEEDS_DEPLOYMENT_TESTING,
+    FindingStatus.INFORMATIONAL,
 }
 
 

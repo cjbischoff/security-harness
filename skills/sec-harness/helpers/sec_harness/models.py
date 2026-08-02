@@ -35,6 +35,9 @@ class FindingStatus(str, Enum):
     # terminal state that is NOT confirmed and NOT a false positive (F9); reported in
     # its own section so an unconfirmable HIGH is never fudged to a confirmed MEDIUM.
     NEEDS_DEPLOYMENT_TESTING = "needs-deployment-testing"
+    # Low-value vendored-rule hit (O-027): terminal, never re-run, never enters the
+    # confirmed report or the FP ladder as `raw`.
+    INFORMATIONAL = "informational"
 
 
 @dataclass
