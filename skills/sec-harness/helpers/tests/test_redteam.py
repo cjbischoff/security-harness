@@ -64,23 +64,47 @@ def test_write_plan(tmp_path):
     assert (ws.reports / "redteam-plan.md").exists()
 
 
-def _rt(id_, sev, risk, disp="needs-runtime", status=None):
+def _rt(id_, sev, risk, disp="needs-runtime", status=None, evidence_sources=None):
     return Finding(id=id_, rule_id="r", cls="authz",
                    status=status or FindingStatus.CONFIRMED, severity=sev,
                    file="a.py", line=1, message="m", risk_score=risk,
-                   runtime_disposition=disp)
+                   runtime_disposition=disp,
+                   evidence_sources=evidence_sources if evidence_sources is not None else [])
 
 
 def test_confirmed_high_severity_needs_runtime_is_actionable_below_min_risk():
     # critical needs-runtime with risk 5 (below the 7 bar) MUST still be a directive (O-016/O-031).
-    crit = _rt("A-1", Severity.CRITICAL, 5)
+    # A real confirmed finding always carries a tool receipt via the confirmation gate.
+    crit = _rt("A-1", Severity.CRITICAL, 5, evidence_sources=["ast-grep:sink"])
     disc = discriminate([crit], min_risk=7)
     assert [f.id for f in disc["needs_runtime"]] == ["A-1"]
     assert disc["below_bar"] == []
 
 
 def test_low_severity_needs_runtime_gated_by_min_risk():
-    low = _rt("A-2", Severity.LOW, 4)
+    low = _rt("A-2", Severity.LOW, 4, evidence_sources=["ast-grep:sink"])
     disc = discriminate([low], min_risk=7)
     assert [f.id for f in disc["below_bar"]] == ["A-2"]
     assert disc["needs_runtime"] == []
+
+
+def test_lead_carrier_without_receipt_is_not_a_directive():
+    # LEAD/doc-lead carriers (llm-claimed-only, no tool receipt) must not bypass min_risk via
+    # the severity gate, even at MEDIUM+needs-deployment-testing.
+    lead = _rt(
+        "A-3", Severity.MEDIUM, None,
+        status=FindingStatus.NEEDS_DEPLOYMENT_TESTING,
+        evidence_sources=["llm-claimed:doc-lead"],
+    )
+    disc = discriminate([lead], min_risk=7)
+    assert [f.id for f in disc["below_bar"]] == ["A-3"]
+    assert disc["needs_runtime"] == []
+
+
+def test_needs_runtime_sorts_critical_before_low_when_risk_score_is_none():
+    # Promoted NDT/LEAD findings often have no risk_score; severity must tiebreak the sort.
+    # Both need a tool receipt + actionable severity to enter the plan without a risk_score.
+    medium = _rt("A-4", Severity.MEDIUM, None, evidence_sources=["ast-grep:sink"])
+    crit = _rt("A-5", Severity.CRITICAL, None, evidence_sources=["ast-grep:sink"])
+    disc = discriminate([medium, crit], min_risk=7)
+    assert [f.id for f in disc["needs_runtime"]] == ["A-5", "A-4"]

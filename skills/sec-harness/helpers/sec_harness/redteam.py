@@ -23,6 +23,13 @@ from sec_harness.workspace import Workspace, load_paths, read_findings
 DEFAULT_MIN_RISK = 7
 _REPORTABLE = {FindingStatus.CONFIRMED, FindingStatus.FIXED}
 _ACTIONABLE_SEVERITIES = {Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM}
+_SEV_RANK = {
+    Severity.CRITICAL: 4,
+    Severity.HIGH: 3,
+    Severity.MEDIUM: 2,
+    Severity.LOW: 1,
+    Severity.INFO: 0,
+}
 
 
 def wants_runtime(f: Finding) -> bool:
@@ -34,9 +41,11 @@ def _above_bar(f: Finding, min_risk: int) -> bool:
     """A needs-runtime finding is actionable if its severity is >= medium, else gated by min_risk.
 
     Fixes O-016/O-031: min_risk can no longer hide a confirmed critical/high whose deterministic
-    risk_score sits low.
+    risk_score sits low. Fixes the LEAD/doc-lead flood: the severity pass also requires a tool
+    receipt, so an llm-claimed-only carrier can't bypass min_risk on severity alone.
     """
-    if f.severity in _ACTIONABLE_SEVERITIES:
+    has_receipt = any(is_tool_receipt(s) for s in f.evidence_sources)
+    if f.severity in _ACTIONABLE_SEVERITIES and has_receipt:
         return True
     return (f.risk_score or 0) >= min_risk
 
@@ -70,7 +79,7 @@ def discriminate(findings: list[Finding], min_risk: int = DEFAULT_MIN_RISK) -> d
             static_settled.append(f)
 
     def key(f: Finding):
-        return (-(f.risk_score or 0), f.id)
+        return (-(f.risk_score or 0), -_SEV_RANK.get(f.severity, 0), f.id)
 
     return {
         "needs_runtime": sorted(plan, key=key),
