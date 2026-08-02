@@ -59,14 +59,16 @@ class GateDecision:
     claim_id: str
     status: str  # "reject" | "to-adversary"
     reasons: list[str] = field(default_factory=list)
+    refs: list[str] = field(default_factory=list)
+    text: str = ""
 
 
 def run_phase_checks(claims: list[dict], target_root: str | Path) -> list[GateDecision]:
     """Return a :class:`GateDecision` per claim for an analysis/context phase.
 
     Args:
-        claims: Each is ``{"id": str, "refs": [path or file:line, ...]}`` — the code
-            references the phase's claim rests on.
+        claims: Each is ``{"id": str, "text": str, "refs": [path or file:line, ...]}`` — the
+            claim's assertion and the code references it rests on.
         target_root: The scanned repo root the references resolve against.
 
     Returns:
@@ -86,7 +88,8 @@ def run_phase_checks(claims: list[dict], target_root: str | Path) -> list[GateDe
                 reject = True
         if not refs:
             reasons.append("no code refs to verify — sent to adversary on judgment alone")
-        out.append(GateDecision(cid, "reject" if reject else "to-adversary", reasons))
+        out.append(GateDecision(cid, "reject" if reject else "to-adversary", reasons,
+                                 refs=list(refs), text=str(claim.get("text", ""))))
     return out
 
 
@@ -105,12 +108,15 @@ def build_gate_record(
 
     Returns:
         ``{phase, claims_in, rejected_deterministically, sent_to_adversary, survivors,
-        decisions, verdicts}``.
+        decisions, verdicts, claims}``, where ``claims`` maps each sent-to-adversary
+        claim id to its ``{text, refs}`` so the adversary reviews content, not opaque ids.
     """
     verdicts = verdicts or {}
     rejected_det = [d.claim_id for d in decisions if d.status == "reject"]
     to_adv = [d.claim_id for d in decisions if d.status == "to-adversary"]
     survivors = [c for c in to_adv if verdicts.get(c, "CONFIRMED") != "INVALIDATED"]
+    claims = {d.claim_id: {"text": d.text, "refs": d.refs}
+              for d in decisions if d.status == "to-adversary"}
     return {
         "phase": phase,
         "claims_in": len(decisions),
@@ -119,6 +125,7 @@ def build_gate_record(
         "survivors": survivors,
         "decisions": [asdict(d) for d in decisions],
         "verdicts": verdicts,
+        "claims": claims,
     }
 
 

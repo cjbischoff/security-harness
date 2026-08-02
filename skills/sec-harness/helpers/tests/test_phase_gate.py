@@ -57,3 +57,16 @@ def test_write_gate_record(tmp_path):
     rec = build_gate_record("threat-model", [GateDecision("x", "to-adversary")])
     p = write_gate_record(ws, "threat-model", rec)
     assert p.exists() and p.name == "threat-model.json"
+
+
+def test_gate_decision_and_record_carry_claim_content(tmp_path):
+    (tmp_path / "a.py").write_text("x = 1\n")
+    claims = [{"id": "ep-0", "text": "entrypoint handler foo", "refs": ["a.py"]},
+              {"id": "ep-1", "text": "missing thing", "refs": ["nope.py"]}]
+    decs = run_phase_checks(claims, tmp_path)
+    d0 = {d.claim_id: d for d in decs}["ep-0"]
+    assert d0.refs == ["a.py"] and d0.text == "entrypoint handler foo"
+    rec = build_gate_record("recon", decs)
+    # the sent-to-adversary claim's text+refs are recoverable from the record (O-004)
+    assert rec["claims"]["ep-0"] == {"text": "entrypoint handler foo", "refs": ["a.py"]}
+    assert rec["decisions"][0]["text"] == "entrypoint handler foo"
