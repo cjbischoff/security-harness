@@ -129,6 +129,49 @@ def build_gate_record(
     }
 
 
+def claims_from_profile(profile) -> list[dict]:
+    """Turn a recon ScanProfile into gate claims (one per entrypoint + subsystem).
+
+    Args:
+        profile: A :class:`sec_harness.profile.ScanProfile` (or any object exposing the same
+            ``entrypoints`` / ``subsystems`` attributes).
+
+    Returns:
+        Claims in ``{"id", "text", "refs"}`` form, ready for :func:`run_phase_checks`.
+    """
+    claims: list[dict] = []
+    for i, ep in enumerate(getattr(profile, "entrypoints", []) or []):
+        ref = ep.split(":")[0] if isinstance(ep, str) else str(ep)
+        claims.append({"id": f"ep-{i}", "text": f"entrypoint {ep}",
+                       "refs": [ref] if ref else []})
+    for i, s in enumerate(getattr(profile, "subsystems", []) or []):
+        name = s.get("name", f"sub-{i}")
+        claims.append({"id": f"sub-{i}:{name}",
+                       "text": f"subsystem {name}: {s.get('why', '')}",
+                       "refs": list(s.get("paths", []))})
+    return claims
+
+
+def claims_from_context(ctx) -> list[dict]:
+    """Turn an ingested Context into gate claims (one per item with a code location).
+
+    Args:
+        ctx: A :class:`sec_harness.context.Context` (or any object exposing an ``items``
+            list of :class:`~sec_harness.context.ContextItem`-shaped entries).
+
+    Returns:
+        Claims in ``{"id", "text", "refs"}`` form, ready for :func:`run_phase_checks`.
+    """
+    claims: list[dict] = []
+    for i, it in enumerate(getattr(ctx, "items", []) or []):
+        where = getattr(it, "where", "") or ""
+        kind = getattr(it, "kind", "item")
+        text = getattr(it, "text", "") or ""
+        claims.append({"id": f"ctx-{i}", "text": f"{kind}: {text}".strip(),
+                       "refs": [where] if where else []})
+    return claims
+
+
 def write_gate_record(ws, phase: str, record: dict) -> Path:
     """Persist a gate record to ``kb/gates/<phase>.json`` and return the path."""
     d = ws.kb / "gates"

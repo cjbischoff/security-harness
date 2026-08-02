@@ -1,5 +1,7 @@
 """Tests for the reusable phase adversary gate (deterministic half)."""
 
+from typing import ClassVar
+
 from sec_harness.phase_gate import (
     GateDecision,
     build_gate_record,
@@ -57,6 +59,40 @@ def test_write_gate_record(tmp_path):
     rec = build_gate_record("threat-model", [GateDecision("x", "to-adversary")])
     p = write_gate_record(ws, "threat-model", rec)
     assert p.exists() and p.name == "threat-model.json"
+
+
+def test_claims_from_profile_extracts_entrypoints_and_subsystems():
+    from sec_harness.phase_gate import claims_from_profile
+
+    class P:  # minimal stand-in matching ScanProfile's attributes used here
+        entrypoints: ClassVar = ["src/app.py:handler", "src/api.py:route"]
+        subsystems: ClassVar = [{"name": "auth", "paths": ["src/auth.py"], "why": "login"}]
+
+    claims = claims_from_profile(P())
+    ids = {c["id"] for c in claims}
+    assert "ep-0" in ids and any(c["id"].startswith("sub-0") for c in claims)
+    ep0 = next(c for c in claims if c["id"] == "ep-0")
+    assert ep0["refs"] == ["src/app.py"]           # path before the ':symbol'
+    sub = next(c for c in claims if c["id"].startswith("sub-0"))
+    assert sub["refs"] == ["src/auth.py"]
+
+
+def test_claims_from_context_extracts_items_with_locations():
+    from sec_harness.context import Context, ContextItem
+    from sec_harness.phase_gate import claims_from_context
+
+    ctx = Context(items=[
+        ContextItem(kind="trust_boundary", text="API gateway terminates TLS",
+                    where="src/gateway.py:10"),
+        ContextItem(kind="prior_finding", text="no code location"),
+    ])
+    claims = claims_from_context(ctx)
+    assert len(claims) == 2
+    c0 = claims[0]
+    assert c0["id"] == "ctx-0"
+    assert c0["refs"] == ["src/gateway.py:10"]
+    assert "trust_boundary" in c0["text"] and "API gateway terminates TLS" in c0["text"]
+    assert claims[1]["refs"] == []
 
 
 def test_gate_decision_and_record_carry_claim_content(tmp_path):
