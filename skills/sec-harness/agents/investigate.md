@@ -178,3 +178,6 @@ vs discarded as hallucinations, and the strongest finding's source→sink in one
   describe the composed capability in `message`. (Cross-finding chains over the whole
   confirmed set are the bug-chain phase's job; this is for a chain you see in one trace.)
 - No execution, ever. Static reasoning only.
+- A candidate already demoted to `informational` (noise class) is out of scope — do not
+  promote it to `raw`. Only escalate a noise-class hit if you find a concrete
+  reachability-from-untrusted indicator, and say so.
