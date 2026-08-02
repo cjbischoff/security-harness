@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -10,6 +11,7 @@ from pathlib import Path
 
 from sec_harness.campaign import record_stage
 from sec_harness.codeql import CodeQLError, codeql_config_trusted, qlpack_installed, run_codeql
+from sec_harness.coverage import compute_coverage
 from sec_harness.exclusions import apply_exclusions, load_exclusions
 from sec_harness.normalize import normalize
 from sec_harness.profile import ScanProfile
@@ -68,11 +70,13 @@ def run_prefilter(
     list is built deterministically — thread scheduling never affects output.
 
     Returns:
-        ``{"candidates", "backends_run", "skipped", "failed", "excluded", "dropped_nonsecurity", "skipped_reasons"}`` where
-        ``failed`` is a list of ``{"backend", "error"}``, ``excluded`` is the
-        count of suppressed findings, ``dropped_nonsecurity`` is the count of
-        unknown-class semgrep findings dropped when security_only is enabled, and
-        ``skipped_reasons`` records why each backend was not run.
+        ``{"candidates", "backends_run", "skipped", "failed", "excluded", "dropped_nonsecurity",
+        "skipped_reasons", "coverage"}`` where ``failed`` is a list of ``{"backend", "error"}``,
+        ``excluded`` is the count of suppressed findings, ``dropped_nonsecurity`` is the count of
+        unknown-class semgrep findings dropped when security_only is enabled, ``skipped_reasons``
+        records why each backend was not run, and ``coverage`` is the per-language dataflow/
+        pattern-only/none breakdown from :func:`sec_harness.coverage.compute_coverage` (also
+        persisted to ``kb/coverage.json``).
     """
     plan = profile.sast_plan
     codeql_db_root = tempfile.mkdtemp(prefix="sec-harness-codeql-")
@@ -220,6 +224,9 @@ def run_prefilter(
         f.id = f"C-{i:04d}"
 
     write_findings(ws, kept)
+    coverage = compute_coverage(profile, ran, target)
+    ws.kb.mkdir(parents=True, exist_ok=True)
+    (ws.kb / "coverage.json").write_text(json.dumps(coverage, indent=2))
     record_stage(ws, "prefilter")
     return {
         "candidates": len(kept),
@@ -229,4 +236,5 @@ def run_prefilter(
         "excluded": len(dropped),
         "dropped_nonsecurity": dropped_nonsecurity,
         "skipped_reasons": skipped_reasons,
+        "coverage": coverage,
     }
