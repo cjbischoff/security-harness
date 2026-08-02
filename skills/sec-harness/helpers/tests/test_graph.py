@@ -67,3 +67,35 @@ def test_attach_facts_tags_sources():
     assert by_source["sca"].kind == "dependency"
     assert by_source["secrets"].node_id == "a.py:3:k"
     assert by_source["crypto-policy"].detail == "md5 usage"
+
+
+def test_reaches_finds_transitive_path():
+    graph = g.build_tier1(FIXTURE, sha="x")
+    assert g.reaches(graph, "app/api.py:4:handler", "app/db.py:1:run_query")
+    # no reverse path
+    assert not g.reaches(graph, "app/db.py:1:run_query", "app/api.py:4:handler")
+
+
+def test_attacker_controls_is_reaches():
+    graph = g.build_tier1(FIXTURE, sha="x")
+    assert g.attacker_controls(graph, "app/api.py:4:handler", "app/db.py:1:run_query")
+
+
+def test_reaches_respects_depth_cap():
+    graph = g.Graph(1, "s", ["tier-1"], [], [
+        g.Node("a", "symbol", "a", 1, "a", {}),
+        g.Node("b", "symbol", "b", 1, "b", {}),
+        g.Node("c", "symbol", "c", 1, "c", {}),
+    ], [g.Edge("a", "b", "calls"), g.Edge("b", "c", "calls")], [])
+    assert g.reaches(graph, "a", "c", max_depth=2)
+    assert not g.reaches(graph, "a", "c", max_depth=1)
+
+
+def test_is_unresolvable():
+    graph = g.Graph(1, "s", ["tier-1"], [], [
+        g.Node("a", "symbol", "a", 1, "a", {"unresolvable": True}),
+        g.Node("b", "symbol", "b", 1, "b", {}),
+    ], [], [])
+    assert g.is_unresolvable(graph, "a")
+    assert not g.is_unresolvable(graph, "b")
+    assert not g.is_unresolvable(graph, "missing")

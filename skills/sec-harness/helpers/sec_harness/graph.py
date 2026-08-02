@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -209,3 +210,73 @@ def attach_facts(
             graph.facts.append(
                 Fact(kind, row["detail"], source, row.get("node_id"))
             )
+
+
+_TRAVERSABLE = {"calls", "imports", "taint"}
+
+
+def _adjacency(graph: Graph, kinds: set[str]) -> dict[str, list[str]]:
+    """Build a src -> [dst] map over edges whose kind is in ``kinds``."""
+    adj: dict[str, list[str]] = {}
+    for e in graph.edges:
+        if e.kind in kinds:
+            adj.setdefault(e.src, []).append(e.dst)
+    return adj
+
+
+def _bfs(adj: dict[str, list[str]], src: str, dst: str, max_depth: int) -> bool:
+    """Return True if ``dst`` is reachable from ``src`` within ``max_depth`` hops."""
+    if src == dst:
+        return True
+    queue: deque[tuple[str, int]] = deque([(src, 0)])
+    seen = {src}
+    while queue:
+        node, depth = queue.popleft()
+        if depth >= max_depth:
+            continue
+        for nxt in adj.get(node, []):
+            if nxt == dst:
+                return True
+            if nxt not in seen:
+                seen.add(nxt)
+                queue.append((nxt, depth + 1))
+    return False
+
+
+def reaches(graph: Graph, src: str, dst: str, *, max_depth: int = 12) -> bool:
+    """True if ``dst`` is reachable from ``src`` over call/import/taint edges.
+
+    Positive corroboration only: heuristic Tier-1 edges are incomplete, so a False
+    result is NOT proof of unreachability — use :func:`no_path` for a disproof receipt.
+
+    Args:
+        graph: The substrate.
+        src: Source node id.
+        dst: Target node id.
+        max_depth: Maximum edge hops to traverse.
+
+    Returns:
+        Whether a path exists within the depth bound.
+    """
+    return _bfs(_adjacency(graph, _TRAVERSABLE), src, dst, max_depth)
+
+
+def attacker_controls(graph: Graph, source: str, node: str, *, max_depth: int = 12) -> bool:
+    """True if an external-input ``source`` node reaches ``node`` (attacker-control).
+
+    Args:
+        graph: The substrate.
+        source: An external-input source node id.
+        node: The node whose attacker-control is in question.
+        max_depth: Maximum edge hops to traverse.
+
+    Returns:
+        Whether the source reaches the node.
+    """
+    return reaches(graph, source, node, max_depth=max_depth)
+
+
+def is_unresolvable(graph: Graph, node_id: str) -> bool:
+    """True if ``node_id`` is flagged dynamic/reflective/config-wired (route to runtime)."""
+    n = graph.node(node_id)
+    return bool(n and n.attrs.get("unresolvable", False))
