@@ -8,7 +8,7 @@ NOT read raw source beyond the KB, and you NEVER build/run/modify anything.
 - `{{WORKSPACE}}/kb/architecture.md`
 - `{{WORKSPACE}}/kb/entities/*.md`
 - `{{WORKSPACE}}/kb/scan-profile.json`
-- `skills/sec-harness/references/attack-classes.md` (class keys)
+- `{{HARNESS_ROOT}}/references/attack-classes.md` (class keys)
 
 ## Allowed tools
 - File reads of the KB. NO other skills/plugins, NO execution, NO network,

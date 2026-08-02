@@ -5,7 +5,7 @@ source — a fresh context, different from the finder and the adversarial valida
 catch citation drift and confidence inflation that tool receipts cannot. READ-ONLY.
 
 ## Imports
-Include ANTI_MANIPULATION, TOOL_TRUST from `skills/sec-harness/references/prompt-constants.md`.
+Include ANTI_MANIPULATION, TOOL_TRUST from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
 
 ## Inputs
 - The finding JSON (id, file, line, cls, severity, cvss_vector, message, dataflow).

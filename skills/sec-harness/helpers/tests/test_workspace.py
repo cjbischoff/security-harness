@@ -2,7 +2,15 @@
 
 import json
 
-from sec_harness.workspace import Workspace, load_paths
+from sec_harness.models import Finding, FindingStatus, Severity
+from sec_harness.workspace import (
+    Workspace,
+    load_paths,
+    read_agent_return,
+    read_findings,
+    record_agent_return,
+    write_findings,
+)
 
 
 def test_defaults_unchanged(tmp_path):
@@ -80,3 +88,64 @@ def test_load_paths_requires_workspace(tmp_path):
     cfg.write_text(json.dumps({"reports_dir": str(tmp_path / "R")}))
     with pytest.raises(ValueError):
         load_paths(workspace=None, paths_config=cfg)
+
+
+def _finding(fid: str) -> Finding:
+    """Minimal finding fixture."""
+    return Finding(
+        id=fid,
+        rule_id="r",
+        cls="sqli",
+        status=FindingStatus.RAW,
+        severity=Severity.MEDIUM,
+        file="a.py",
+        line=1,
+        message="m",
+    )
+
+
+def test_write_findings_atomic_no_temp_left(tmp_path):
+    """write_findings leaves the final file and no stray temp artifacts (T8)."""
+    ws = Workspace(tmp_path)
+    write_findings(ws, [_finding("F-1")])
+    names = [p.name for p in ws.findings_dir.iterdir()]
+    assert names == ["F-1.json"]  # exactly the final file — no *.tmp sidecar
+    assert read_findings(ws)[0].id == "F-1"
+
+
+def test_write_findings_no_partial_on_serialize_failure(tmp_path, monkeypatch):
+    """A serialization crash mid-write must not truncate an existing file (T8)."""
+    import sec_harness.workspace as wsmod
+
+    ws = Workspace(tmp_path)
+    write_findings(ws, [_finding("F-1")])
+    target = ws.findings_dir / "F-1.json"
+    good = target.read_text()
+
+    boom = _finding("F-1")
+    monkeypatch.setattr(
+        wsmod.json, "dumps", lambda *a, **k: (_ for _ in ()).throw(ValueError("boom"))
+    )
+    try:
+        write_findings(ws, [boom])
+    except ValueError:
+        pass
+    # original content intact; no half-written temp file abandoned in the dir
+    assert target.read_text() == good
+    assert [p.name for p in ws.findings_dir.iterdir()] == ["F-1.json"]
+
+
+def test_agent_return_roundtrips(tmp_path):
+    """Agent final returns persist to runs/<agent>.txt and read back (T13)."""
+    ws = Workspace(tmp_path)
+    record_agent_return(ws, "investigate-sqli", "found 2 candidates")
+    assert (ws.runs / "investigate-sqli.txt").is_file()
+    assert read_agent_return(ws, "investigate-sqli") == "found 2 candidates"
+    assert read_agent_return(ws, "missing") is None
+
+
+def test_ensure_creates_runs(tmp_path):
+    """ensure() creates the runs directory (T13)."""
+    ws = Workspace(tmp_path)
+    ws.ensure()
+    assert ws.runs.is_dir()

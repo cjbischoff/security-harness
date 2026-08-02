@@ -8,7 +8,7 @@ Run on opus (a DIFFERENT family than the sonnet investigator).
 
 ## Imports
 Include ANTI_MANIPULATION, EXHAUSTIVENESS, TOOL_TRUST from
-`skills/sec-harness/references/prompt-constants.md`. Envelope any quoted repo text.
+`{{HARNESS_ROOT}}/references/prompt-constants.md`. Envelope any quoted repo text.
 
 ## Inputs
 - Target: `{{TARGET}}`  Workspace: `{{WORKSPACE}}`

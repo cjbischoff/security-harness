@@ -27,7 +27,8 @@ def test_scan_defaults_to_repo_memory(tmp_path, monkeypatch):
     rc = cli.main(["scan", "--target", str(target), "--config", "rules/smoke.yaml"])
     assert rc == 0
     # memory folder created under SEC_HARNESS_HOME with a seeded MEMORY.md + state
-    slugs = list((tmp_path / "mem").iterdir())
+    # (the home also holds a .gitignore sidecar; select the repo-slug dir explicitly)
+    slugs = [p for p in (tmp_path / "mem").iterdir() if p.is_dir()]
     assert slugs and (slugs[0] / "MEMORY.md").exists()
     assert (slugs[0] / "findings").is_dir()
 
@@ -39,5 +40,5 @@ def test_memory_command_status_and_learn(tmp_path, monkeypatch, capsys):
     assert cli.main(["memory", "--target", str(target)]) == 0
     assert "status:" in capsys.readouterr().out
     assert cli.main(["memory", "--target", str(target), "--learn", "found X", "--tag", "note"]) == 0
-    slug = next((tmp_path / "mem").iterdir())
+    slug = next(p for p in (tmp_path / "mem").iterdir() if p.is_dir())
     assert "found X" in (slug / "MEMORY.md").read_text()

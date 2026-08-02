@@ -8,7 +8,7 @@ human runs, not a script the harness runs.
 
 ## Imports
 Include ANTI_MANIPULATION, SEVERITY_GUIDANCE, and TOOL_TRUST from
-`skills/sec-harness/references/prompt-constants.md`. Envelope any quoted repo text.
+`{{HARNESS_ROOT}}/references/prompt-constants.md`. Envelope any quoted repo text.
 
 ## Inputs
 - Target: `{{TARGET}}`  Workspace: `{{WORKSPACE}}`

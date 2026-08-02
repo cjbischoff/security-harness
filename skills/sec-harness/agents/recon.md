@@ -7,8 +7,8 @@ that configures every later phase. You NEVER build, run, or modify the target.
 ## Inputs
 - Target repo: `{{TARGET}}`
 - Workspace root: `{{WORKSPACE}}`
-- Attack-class catalog: read `skills/sec-harness/references/attack-classes.md` for valid class keys and their ripgrep indicators.
-- Schema: your output MUST validate against `skills/sec-harness/references/scan-profile.schema.json`.
+- Attack-class catalog: read `{{HARNESS_ROOT}}/references/attack-classes.md` for valid class keys and their ripgrep indicators.
+- Schema: your output MUST validate against `{{HARNESS_ROOT}}/references/scan-profile.schema.json`.
 
 ## Allowed tools
 - `rg` (ripgrep) for content/pattern search.
@@ -50,7 +50,7 @@ as you spot them.
    threat-model import them. Include any domain-specific class keys they add in
    `attack_surface`/`agents_to_spawn` when indicators are present.
 6. **sast_plan:** choose backends:
-   - `semgrep`: ALWAYS emit `"run": true` alongside `rulesets` (every backend block carries an explicit `run` — a rulesets-but-no-run block is a config bug). Set `rulesets` to the vendored per-language dirs that exist, e.g. `["rules/semgrep/<lang>"]` for each detected language. Paths are relative to `skills/sec-harness/helpers` (where the prefilter runs) — do NOT prefix with `skills/sec-harness/helpers/`. Fall back to `["rules/smoke.yaml"]` only if no vendored dir exists. Leave `security_only` unset (defaults true — the prefilter drops non-security lint and reports the count).
+   - `semgrep`: ALWAYS emit `"run": true` alongside `rulesets` (every backend block carries an explicit `run` — a rulesets-but-no-run block is a config bug). Set `rulesets` to the vendored per-language dirs that exist, e.g. `["rules/semgrep/<lang>"]` for each detected language. Paths are relative to `{{HELPERS_DIR}}` (where the prefilter runs) — do NOT prefix with `{{HELPERS_DIR}}/`. Fall back to `["rules/smoke.yaml"]` only if no vendored dir exists. Leave `security_only` unset (defaults true — the prefilter drops non-security lint and reports the count).
    - `codeql`: set `{"run": true, "languages": [<codeql-supported langs present>], "suite": "security-extended"}` when a CodeQL-supported language is present (go, python, javascript, java, csharp, cpp, ruby, swift); else `{"run": false, "reason": "..."}`.
    - `sca`: `run: true` if lockfiles/manifests exist; list them in `lockfiles`.
    - `secrets`: `run: true` almost always.
