@@ -138,3 +138,30 @@ def test_inflation_flag_recorded(tmp_path):
     assert f.risk_score == 8                       # floored (ordering)
     events = [h for h in f.history if h.get("event") == "calibrate:severity-inflated"]
     assert len(events) == 1 and events[0]["delta"] == 4   # 9 (claimed) - 5 (pre-floor derived)
+
+
+def test_cluster_a_acceptance_ordering(tmp_path):
+    """A confirmed critical needs-runtime finding outranks a medium AND enters the plan."""
+    from sec_harness.redteam import discriminate
+    crit = Finding(id="AUTHZ-0001", rule_id="r", cls="authz",
+                   status=FindingStatus.CONFIRMED, severity=Severity.CRITICAL,
+                   file="orders.js", line=87, message="unauth order cancel",
+                   cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:H/A:H",
+                   preconditions=["unauthenticated", "knows order id"],
+                   runtime_disposition="needs-runtime")
+    med = Finding(id="SECRETS-0002", rule_id="r", cls="secrets",
+                  status=FindingStatus.CONFIRMED, severity=Severity.MEDIUM,
+                  file=".env.example", line=23, message="committed secret",
+                  cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:H/A:N",
+                  preconditions=["secret is live"], runtime_disposition="needs-runtime")
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    write_findings(ws, [crit, med])
+    calibrate_findings(ws)
+    by_id = {f.id: f for f in read_findings(ws)}
+    crit_score = by_id["AUTHZ-0001"].risk_score
+    med_score = by_id["SECRETS-0002"].risk_score
+    assert crit_score is not None and med_score is not None
+    assert crit_score >= med_score                           # critical never below medium
+    assert crit_score >= 8
+    disc = discriminate(read_findings(ws), min_risk=7)
+    assert "AUTHZ-0001" == disc["needs_runtime"][0].id       # critical ranks first in the plan
