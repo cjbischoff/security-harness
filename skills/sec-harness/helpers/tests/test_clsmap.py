@@ -66,3 +66,11 @@ def test_cls_from_rule_id_codeql_ids():
     assert cls_from_rule_id("py/clear-text-logging-sensitive-data") == "clear-text-logging"
     assert cls_from_rule_id("py/stack-trace-exposure") == "clear-text-logging"
     assert cls_from_rule_id("js/regex/missing-regexp-anchor") == ""  # unmapped, stays unknown
+
+
+def test_noise_classes():
+    from sec_harness.clsmap import NOISE_CLASSES, is_noise_class
+    assert is_noise_class("log-injection") and is_noise_class("clear-text-logging")
+    assert is_noise_class("unknown")
+    assert not is_noise_class("sqli") and not is_noise_class("ssrf")
+    assert "log-injection" in NOISE_CLASSES
