@@ -164,3 +164,20 @@ def test_cluster_a_acceptance_ordering(tmp_path):
     assert crit_score >= 8
     disc = discriminate(read_findings(ws), min_risk=7)
     assert "AUTHZ-0001" == disc["needs_runtime"][0].id       # critical ranks first in the plan
+
+
+def test_malformed_cvss_does_not_crash_batch(tmp_path):
+    # O-029: one finding with an invalid metric must NOT zero the others; it falls back to heuristic.
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    good = Finding(id="G", rule_id="r", cls="sqli", status=FindingStatus.CONFIRMED,
+                   severity=Severity.HIGH, file="a.py", line=1, message="m",
+                   dataflow=["a @ x:1", "-> b @ x:2"])
+    bad = Finding(id="B", rule_id="r", cls="secrets", status=FindingStatus.CONFIRMED,
+                  severity=Severity.MEDIUM, file="a.py", line=2, message="m",
+                  cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:M/I:H/A:N")
+    write_findings(ws, [good, bad])
+    n = calibrate_findings(ws)                 # must not raise
+    assert n == 2
+    by_id = {f.id: f for f in read_findings(ws)}
+    assert by_id["G"].risk_score == 9          # good finding scored normally
+    assert by_id["B"].risk_score is not None    # bad-vector finding fell back to heuristic, not crash

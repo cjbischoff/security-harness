@@ -141,21 +141,26 @@ def calibrate_findings(ws: Workspace) -> int:
     scored = 0
     for f in findings:
         if f.status is FindingStatus.CONFIRMED:
-            _attach_citations(f)  # F1: auto-attach ASVS/CodeGuard (no-op if already set)
-            derived = _derived_score(f)  # pre-floor: floor must not mask inflation
-            f.risk_score = calibrate_score(f)
-            delta = inflation_delta(f, derived)
-            if delta >= _INFLATION_THRESHOLD and not any(
-                h.get("event") == "calibrate:severity-inflated" for h in f.history
-            ):
-                f.history.append({"event": "calibrate:severity-inflated",
-                                  "claimed": f.severity.value, "derived": derived,
-                                  "delta": delta})
-            if f.cvss_vector:
-                try:
-                    f.priority = offensive_priority(f.cvss_vector)
-                except ValueError:
-                    pass
+            try:
+                _attach_citations(f)  # F1: auto-attach ASVS/CodeGuard (no-op if already set)
+                derived = _derived_score(f)  # pre-floor: floor must not mask inflation
+                f.risk_score = max(derived, _severity_floor(f.severity))
+                if _is_baseline_standard(f):
+                    f.risk_score = min(f.risk_score, _BASELINE_CAP)
+                delta = inflation_delta(f, derived)
+                if delta >= _INFLATION_THRESHOLD and not any(
+                    h.get("event") == "calibrate:severity-inflated" for h in f.history
+                ):
+                    f.history.append({"event": "calibrate:severity-inflated",
+                                      "claimed": f.severity.value, "derived": derived,
+                                      "delta": delta})
+                if f.cvss_vector:
+                    try:
+                        f.priority = offensive_priority(f.cvss_vector)
+                    except ValueError:
+                        pass
+            except Exception as exc:  # noqa: BLE001 — per-finding isolation; one bad finding must not zero the batch
+                f.history.append({"event": "calibrate:error", "error": str(exc)})
             scored += 1
     if scored:
         write_findings(ws, findings)
