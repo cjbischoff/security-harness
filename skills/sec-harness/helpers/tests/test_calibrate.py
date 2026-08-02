@@ -70,6 +70,15 @@ def test_precondition_weight_ignores_free_preconditions():
     assert _precondition_weight(["authenticated low-priv user"]) == 0.5
 
 
+def test_precondition_weight_default_config_vs_non_default_config():
+    from sec_harness.calibrate import _precondition_weight
+    # "default config" (ships vulnerable out of the box) is a FREE substring of the STRONG
+    # "non-default config" (requires a non-default setting) -- both directions must classify
+    # correctly despite the substring collision.
+    assert _precondition_weight(["default config"]) == 0.0
+    assert _precondition_weight(["non-default config"]) == 1.0
+
+
 def test_precondition_cap_uses_weight_not_count():
     from sec_harness.calibrate import _precondition_cap
     # three FREE preconditions -> weight 0 -> no cap (was: count 3 -> cap 5)

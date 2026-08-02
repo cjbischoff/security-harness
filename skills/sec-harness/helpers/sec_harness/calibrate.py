@@ -19,11 +19,11 @@ _BASELINE_CAP = 4
 # Free conditions (unauthenticated/remote/default) are NOT mitigants and never lower risk
 # (fixes O-031: enumerating free preconditions must not penalize a finding).
 _PRECOND_FREE = ("unauth", "no auth", "without auth", "anonymous", "public", "no config",
-                 "no setup", "remote", "any user", "no special", "no privilege")
+                 "default config", "no setup", "remote", "any user", "no special", "no privilege")
 _PRECOND_STRONG = ("admin", "operator", "root", "superuser", "non-default", "feature flag",
                    "feature-flag", "local access", "local-only", "physical", "prior primitive",
-                   "prior-primitive", "chained", "mitm", "man-in-the-middle", "cfg", "config",
-                   "specific config", "guessed", "brute")
+                   "prior-primitive", "chained", "mitm", "man-in-the-middle",
+                   "specific config", "specific configuration", "guessed", "brute")
 _PRECOND_WEAK = ("auth", "login", "logged", "session", "account", "one hop", "csrf",
                  "user interaction")
 # A claimed severity this far above the derived score is flagged as inflation (recall-safe:
@@ -45,10 +45,11 @@ def _precondition_weight(preconditions: list[str]) -> float:
     total = 0.0
     for p in preconditions:
         s = p.lower()
-        if any(k in s for k in _PRECOND_FREE):
-            continue  # non-mitigant; checked first so "unauth..." never matches weak "auth"
         if any(k in s for k in _PRECOND_STRONG):
+            # checked first: "non-default config" must win over FREE's "default config" substring
             total += 1.0
+        elif any(k in s for k in _PRECOND_FREE):
+            continue  # non-mitigant; checked before weak so "unauth..." never matches "auth"
         elif any(k in s for k in _PRECOND_WEAK):
             total += 0.5
     return total
@@ -142,13 +143,14 @@ def calibrate_findings(ws: Workspace) -> int:
     for f in findings:
         if f.status is FindingStatus.CONFIRMED:
             _attach_citations(f)  # F1: auto-attach ASVS/CodeGuard (no-op if already set)
+            derived = _derived_score(f)  # pre-floor: floor must not mask inflation
             f.risk_score = calibrate_score(f)
-            delta = inflation_delta(f, _derived_score(f))  # pre-floor: floor must not mask inflation
+            delta = inflation_delta(f, derived)
             if delta >= _INFLATION_THRESHOLD and not any(
                 h.get("event") == "calibrate:severity-inflated" for h in f.history
             ):
                 f.history.append({"event": "calibrate:severity-inflated",
-                                  "claimed": f.severity.value, "derived": f.risk_score,
+                                  "claimed": f.severity.value, "derived": derived,
                                   "delta": delta})
             if f.cvss_vector:
                 try:
