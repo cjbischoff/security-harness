@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from sec_harness.cvss import cvss31_base, offensive_priority
-from sec_harness.models import Finding, FindingStatus
+from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.workspace import Workspace, read_findings, write_findings
 
 _BASE = {"critical": 9, "high": 7, "medium": 5, "low": 3, "info": 1}
@@ -29,10 +29,9 @@ _PRECOND_WEAK = ("auth", "login", "logged", "session", "account", "one hop", "cs
 # A claimed severity this far above the derived score is flagged as inflation (recall-safe:
 # we flag, we do not silently drop or re-score).
 _INFLATION_THRESHOLD = 3
-# Severity floor: risk_score must never invert severity ordering (fixes O-031). A medium can
-# reach 8 via CVSS (C:L/I:H), so a critical must floor at 8. The floor is applied for ORDERING;
-# the inflation flag (advisory) compares against the pre-floor derived score so disagreement is
-# still surfaced.
+# Severity floor (fixes O-031): a medium can reach 8 via CVSS (C:L/I:H), so a critical must floor
+# at 8. Prevents inversion when severity and CVSS agree; disagreement is surfaced via the
+# inflation flag, not averaged.
 _SEVERITY_FLOOR = {"critical": 8, "high": 6, "medium": 4, "low": 2, "info": 1}
 
 
@@ -74,7 +73,7 @@ def _precondition_cap(preconditions: list[str]) -> int:
     return 5
 
 
-def _severity_floor(severity) -> int:
+def _severity_floor(severity: Severity) -> int:
     """Minimum risk_score implied by the severity band."""
     return _SEVERITY_FLOOR.get(severity.value, 1)
 

@@ -95,9 +95,8 @@ def test_precondition_cap_lowers_score():
     crit_vec = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"  # 9.8 -> 10
     assert calibrate_score(_crit(crit_vec, [])) == 10                       # weight 0 -> no cap
     assert calibrate_score(_crit(crit_vec, ["unauthenticated"])) == 10      # free -> no cap
-    assert calibrate_score(_crit(crit_vec, ["requires admin token",
-                                            "non-default config",
-                                            "local access"])) == 8          # weight 3 -> cap 5, floored 8
+    strong_preconds = ["requires admin token", "non-default config", "local access"]
+    assert calibrate_score(_crit(crit_vec, strong_preconds)) == 8  # weight 3 -> cap 5, floored 8
 
 
 def _sev(id_, sev, cvss, preconds):

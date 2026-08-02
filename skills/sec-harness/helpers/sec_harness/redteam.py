@@ -44,8 +44,9 @@ def _above_bar(f: Finding, min_risk: int) -> bool:
 def discriminate(findings: list[Finding], min_risk: int = DEFAULT_MIN_RISK) -> dict:
     """Partition findings for the runtime plan.
 
-    Considers confirmed/fixed findings plus ``needs-deployment-testing`` leads. A runtime
-    candidate reaches the plan only if its ``risk_score`` meets ``min_risk`` (signal over noise).
+    Considers confirmed/fixed findings plus ``needs-deployment-testing`` leads. A needs-runtime
+    candidate of critical/high/medium severity always reaches the plan; a low-severity candidate
+    reaches it only if its ``risk_score`` meets ``min_risk`` (signal over noise).
 
     Args:
         findings: All workspace findings.
@@ -111,7 +112,8 @@ def render_plan(disc: dict, min_risk: int = DEFAULT_MIN_RISK) -> str:
          "item below is a high-confidence finding whose exploitability must be proven against "
          "the **running** system. The harness does not execute anything — a human runs these._"),
         "",
-        f"Confidence bar for inclusion: `risk_score >= {min_risk}`.",
+        (f"Included: needs-runtime findings of critical/high/medium severity, plus low-severity "
+         f"with `risk_score >= {min_risk}`."),
         "",
         "## Prioritization",
         "",
