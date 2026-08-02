@@ -281,6 +281,18 @@ then commit on the working branch (`skill-audit-driver-20260731`). Models/prefil
 reshape data the Go port mirrors — **decoupled from this work per owner direction**; note them for a later
 golden regeneration but do not block on it.
 
+## Status (2026-08-02 — branch close-out)
+
+All clusters landed. Cluster F completed: **T7** (calibrate crash isolation), **T8** (atomic
+`write_findings` via temp + `os.replace` in `workspace.py`), **T13** (agent-return persistence —
+`workspace.record_agent_return`/`read_agent_return` → `runs/<agent>.txt`; documented in SKILL as the
+disk-state-is-truth convention), **T15** (`{{HARNESS_ROOT}}`/`{{HELPERS_DIR}}` path tokens across all
+agent prompts + SKILL substitution list). Cluster G **T11c** (patch `fix_disposition` schema
+migration) stays deferred per `clusterG-polish.md` (current free-form `patch_diff` + verify's graceful
+git-apply-failure degrade acceptably). Pre-existing, out-of-scope: the `secrets → codeguard-0-cryptography`
+citation remap (that file already carries the "keys never hardcoded" guidance) fixed a broken mapping
+that failed `test_citations` on `main`.
+
 ## Non-goals
 No new SAST engines. No change to the read-only-source invariant. No rewrite of the agent orchestration
 model (still main-agent + subagents). No speculative config.

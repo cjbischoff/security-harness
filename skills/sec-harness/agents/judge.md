@@ -8,7 +8,7 @@ cheaper than another full validation pass.
 
 ## Imports
 Include SEVERITY_GUIDANCE and SEVERITY_PRECONDITION from
-`skills/sec-harness/references/prompt-constants.md`.
+`{{HARNESS_ROOT}}/references/prompt-constants.md`.
 
 ## Inputs
 - The finding JSON (finder's claim: message, severity, preconditions, dataflow, evidence_sources).

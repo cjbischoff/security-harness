@@ -69,9 +69,18 @@ Outputs, under the workspace directory:
 
 One audit pass, in order. The main agent drives this; `<T>` = target repo,
 `<WS>` = workspace dir, `<sha>` = `git -C <T> rev-parse HEAD`, `<rules>` = a local
-semgrep ruleset. Deterministic steps run via `uv run` from `skills/sec-harness/helpers`;
-agent steps spawn a subagent with the named prompt (tokens substituted). Record each
-phase with `record_stage(<WS>, "<phase>")` so passes advance.
+semgrep ruleset. Deterministic steps run via `uv run` from `<HELPERS_DIR>` (the
+absolute path to `skills/sec-harness/helpers`); agent steps spawn a subagent with the
+named prompt (tokens substituted). Prompts use path tokens, never repo-root-relative
+paths, so a subagent reads the right file regardless of its CWD — substitute **all** of
+these before spawning: `{{TARGET}}`, `{{WORKSPACE}}`, `{{ATTACK_CLASS}}`, `{{PHASE}}`,
+`{{ROUND}}`, and the two path anchors `{{HARNESS_ROOT}}` (absolute path to
+`skills/sec-harness/`) and `{{HELPERS_DIR}}` (absolute path to
+`skills/sec-harness/helpers`). Record each phase with `record_stage(<WS>, "<phase>")` so
+passes advance. Persist each agent's final return with
+`workspace.record_agent_return(ws, "<agent-label>", <text>)` (→ `runs/<agent>.txt`) and
+read it back with `read_agent_return` — never depend on a subagent's summary message
+propagating; disk state is the source of truth.
 
 0. **Preflight** — `python -m sec_harness.preflight`; run any printed install/vendor commands before scanning (missing backends are skipped + logged). The report lists which **CodeQL query packs** are installed — the `codeql` binary being present does NOT mean the per-language packs exist, and a missing pack silently drops all of that language's dataflow coverage. If a language you will scan is not listed, run `codeql pack download codeql/<lang>-queries` first. CodeQL runs only on a trusted config (`codeql_config_trusted`); unsupported or untrusted configs are skipped and logged in the prefilter `failed` list.
 1. **Begin pass** — `from sec_harness.state import begin_pass; begin_pass(<WS>, <sha>)` (pins the SHA; increments on repeat passes). Note the import path: `begin_pass` lives in `sec_harness.state`; `record_stage`/`pass_report` live in `sec_harness.campaign`.

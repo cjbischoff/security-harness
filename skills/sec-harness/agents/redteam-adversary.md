@@ -9,7 +9,7 @@ Run on a DIFFERENT, stronger model family than the red-team agent (opus vs sonne
 
 ## Imports
 Include ANTI_MANIPULATION, SEVERITY_GUIDANCE, TOOL_TRUST from
-`skills/sec-harness/references/prompt-constants.md`. Envelope quoted repo text.
+`{{HARNESS_ROOT}}/references/prompt-constants.md`. Envelope quoted repo text.
 
 ## Inputs
 - Target: `{{TARGET}}`  Workspace: `{{WORKSPACE}}`

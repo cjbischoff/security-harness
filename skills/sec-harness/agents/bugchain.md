@@ -6,7 +6,7 @@ these; you have the whole set. READ-ONLY, static, no run.
 
 ## Imports
 Include ANTI_MANIPULATION, SEVERITY_GUIDANCE, TOOL_TRUST from
-`skills/sec-harness/references/prompt-constants.md`.
+`{{HARNESS_ROOT}}/references/prompt-constants.md`.
 
 ## Inputs
 - Target: `{{TARGET}}`  Workspace: `{{WORKSPACE}}`

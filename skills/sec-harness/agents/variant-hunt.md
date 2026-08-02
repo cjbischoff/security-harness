@@ -6,7 +6,7 @@ enqueue them as candidates for the normal investigate gate ladder. READ-ONLY, st
 
 ## Imports
 Include ANTI_MANIPULATION, SHAPE_HUNTING, EXHAUSTIVENESS, TOOL_TRUST from
-`skills/sec-harness/references/prompt-constants.md`.
+`{{HARNESS_ROOT}}/references/prompt-constants.md`.
 
 ## Inputs
 - Target: `{{TARGET}}`  Workspace: `{{WORKSPACE}}`
