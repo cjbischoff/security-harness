@@ -14,6 +14,8 @@ severity (`blocker` / `correctness` / `data-quality` / `efficiency` /
 | 005 | Recon | ai-platform | data-quality (ref doc) | ai-agent hunting-doc class list reads as "select the whole bundle"; nearly inflated scope with unearned mcp-trust-inheritance | BATCHED (doc clarify) |
 | 006 | Recon phase-gate | ai-platform | data-quality (gate coverage) | recon gate emits only entrypoint+subsystem claims; attack_surface/agents_to_spawn overreach not systematically challenged by the adversary | BATCHED |
 | 007 | Recon | ai-platform | correctness (recall/waste) | recon cites plausible-but-nonexistent symbol names (main/authenticate/applyGuardrail); file:line gate passes at file granularity, so investigate is sent to a symbol that isn't there | BATCHED |
+| 008 | Architecture/TM phase-gate | ai-platform | data-quality (missing wiring) | no claim-extractor for free-text architecture.md/THREAT_MODEL.md; phase_gate only has claims_from_profile/context. Naive path extraction over-produces (74 existence-claims) and false-rejects prose basenames (43) | BATCHED |
+| 009 | Architecture | ai-platform | environmental (behavior) | subagent self-censored the Write of `entities/summary-and-persistence.md` ("subagents should return findings as text, not write report files") and renamed; risk = an agent returns text instead of writing a KB artifact (data loss) | BATCHED (dispatch-hardening) |
 
 ## Detail
 
@@ -77,5 +79,41 @@ severity (`blocker` / `correctness` / `data-quality` / `efficiency` /
 - **Proposed:** a recon-time (or gate-time) check that an entrypoint's `:symbol`
   resolves via the structural index / graph symbol nodes, not just the file.
   Medium value; ties into the graph symbol_at helper already present.
+
+### ISSUE-008 — no principled claim-extractor for architecture/threat-model gates — BATCHED
+- `phase_gate` provides `claims_from_profile` and `claims_from_context`, but the
+  architecture and threat-model artifacts are free-text Markdown. SKILL.md says
+  each ends in a phase gate, and `phase-adversary.md` lists them as reviewable, yet
+  nothing turns their content into `{id,text,refs}` claims. The orchestrator must
+  hand-roll extraction.
+- Observed both failure modes of naive extraction on ai-platform's `architecture.md`:
+  pulling every `*.ts` token produced **117 refs, 43 false "rejects"** (all bare
+  basenames mentioned in prose, e.g. `chat.controller.ts` without its `src/`
+  path); restricting to citation-form (path containing `/`) gave **74 refs, 0
+  rejects** — but 74 low-value "this file exists" claims, not the ~10 load-bearing
+  security assertions (trust boundaries, data-flow sinks, fail-open, HITL-empty)
+  the adversary should actually challenge. **Corroborated by the opus adversary:**
+  the deterministic gate only checks ref-resolvability (all 74 resolved) and never
+  tests whether the prose *claim about* each ref is true — a weak gate for free-text
+  phases. The adversary had to be scoped by the orchestrator to load-bearing
+  assertions; without that it would emit 74 noise rows.
+- **Proposed:** a `claims_from_architecture` / `claims_from_threat_model` that
+  extracts the *asserted security claims* (section headers + their cited refs),
+  not raw path mentions; only count citation-form refs for the deterministic
+  reject check. Medium-high value — it's what makes the earlier phase gates real.
+
+### ISSUE-009 — subagent avoids writing "report/summary"-named KB artifacts — BATCHED
+- The architecture subagent tried to write `kb/entities/summary-and-persistence.md`
+  and reported the Write was refused as "subagents should return findings as text,
+  not write report files"; it renamed to `persistence-layer.md` and wrote it
+  (content intact — no loss THIS time). Root cause is not sec-harness code and not
+  the `agent-flow/hook.js` telemetry hook (83 lines, forwards events only) — it is
+  the subagent self-censoring on a report/summary-like filename.
+- **Risk:** a future agent could return the artifact as chat text instead of
+  writing it → silent KB gap. The harness's whole design has agents write KB files.
+- **Proposed (dispatch-hardening, applied for the rest of this run):** every agent
+  dispatch states explicitly that writing the named KB artifact to the given path
+  IS the task and is expected, overriding any "don't write report files" instinct.
+  Longer-term: the agent prompts themselves should carry that assertion.
 
 <!-- entries appended below -->
