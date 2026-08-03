@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "sec-harness coverage ledger",
+  "type": "object",
+  "properties": {
+    "completeness": {"enum": ["complete", "partial", "unknown"]},
+    "surfaces": {"type": "array", "items": {"type": "object", "properties": {
+      "id": {"type": "string"},
+      "disposition": {"enum": ["reported", "no_issue_found", "rejected", "not_applicable", "needs_follow_up"]}
+    }, "required": ["id", "disposition"]}},
+    "deferred": {"type": "array", "items": {"type": "string"}},
+    "open_questions": {"type": "array", "items": {"type": "string"}}
+  },
+  "required": ["completeness", "surfaces"]
+}
