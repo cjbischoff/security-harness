@@ -23,6 +23,54 @@ severity (`blocker` / `correctness` / `data-quality` / `efficiency` /
 | 014 | Investigate (agent output) | ai-platform | data-quality | authz agent emitted AUTHZ-0003 with `severity: "informational"` (valid enum is info/low/medium/high/critical); investigate.md doesn't enumerate the legal values | BATCHED (prompt clarify) + data-fixed this run |
 | 015 | workspace.read_findings | ai-platform | robustness (pipeline-halt) | one malformed finding makes `read_findings` raise ValueError, crashing every downstream phase; `findings_gate` tolerates the same file (exit 1). Inconsistent — a single bad agent output halts the pipeline | BATCHED (robustness) |
 | 016 | Dedupe / instance-preservation | ai-platform | data-quality (recall) | SSRF-0001 (CGNAT) + SSRF-0002 (IPv4-mapped) — distinct bypasses of isPrivateIp — were both written at line 23 by the agent and merged by exact (file,line,cls) dedupe; instance-preservation relies on distinct line anchors that the agent didn't assign | BATCHED + folded this run |
+| 017 | FP ladder (concurrency) | ai-platform | robustness (lost-update) | judge + adversarial-validate (and per-finding parallel critics) each read-modify-write the SAME findings/<id>.json; SKILL.md runs judge "with" validate → concurrent writes to one file lose either judge_verdict or status. write_findings is atomic per-file but there's no cross-agent lock | BATCHED |
+| 018 | Dedupe (cross-class) | ai-platform | data-quality (double-count) | CTL-0001 (ai-agent) and PROMPT-INJECTION-0002 (prompt-injection) are the SAME guardrail.ts:126 fail-open fact under two class framings; dedupe keys on cls so it can't merge them → potential double-count in the report | BATCHED |
+| 019 | Validate/report (disposition) | ai-platform | data-quality (clarity) | "code-defect confirmed but exploit-impact only provable at runtime" (BL-0001, C-0003, PI-0001, SSRF-0001) collapses into the same raw+runtime_dependent bucket as "verification incomplete"; a reviewer can't tell a strong code-settled gap from an unverified one | BATCHED (refines 013) |
+| 020 | Patch | ai-platform | efficiency (prompt) | patch.md doesn't mandate `git apply --check` before returning; opus reliably miscounts hunk @@ line counts on larger diffs (2 corrupt patches this run, self-corrected). Also: multi-line diffs with tabs/templates need the python-json-injector, not the Write tool | BATCHED (prompt hardening) |
+| 021 | Verify | ai-platform | data-quality (verify scope) | verify.py re-runs ONLY semgrep (`from sec_harness.sast import run_semgrep`); a CodeQL/osv/secrets-detected finding (e.g. CodeQL C-0002) can never reach `verified-static`/`fixed`, capped at `static-only` even with a correct applied patch | BATCHED |
+| 022 | Red team (min-risk bar) | ai-platform | data-quality (minor) | needs-deployment-testing findings have risk_score=None; redteam `_above_bar` has a severity+tool-receipt fallback (good — 4/5 surfaced) but a low-severity None finding flagged "prime manual test" (PROMPT-INJECTION-0002) drops to gaps; mostly working-as-intended | BATCHED (low) |
+| 023 | Red team adversary (gate schema) | ai-platform | data-quality (wiring) | redteam-adversary.md verdict vocab (CONFIRMED/WEAKENED/INVALIDATED) vs KEEP/RECLASSIFY/STRIP framing mismatch; `build_gate_record`/`write_gate_record` are phase-claim-shaped (expect GateDecision lists), impedance-mismatched for redteam; kb/gates/redteam.json schema unpinned | BATCHED |
+
+## Run 1 — ai-platform: pipeline result (shakedown complete)
+
+Full agentic pipeline ran **end-to-end, all 12 canonical stages** (`finished: True`).
+Every codex-port feature exercised: graph fingerprint/dedupe, discovery ledger,
+fp_feedback (empty pass 1), coverage ledger (Feature 4, rendered in report), cost.py
+(Feature 6, rendered), per-class proof tuples (authz/resource).
+
+**Audit output (artifacts in `<target>/.sec-harness/ai-platform-01f8c338/`):**
+- **3 confirmed** — C-0002 (resource: unbounded entity fan-out → per-element LLM
+  invocation, high, risk 6), CTL-0001 (ai-agent: Bedrock guardrail fail-open, risk 6),
+  BUSINESS-LOGIC-0002 (non-atomic summary upsert race, risk 3).
+- **5 needs-deployment-testing** — SSRF-0001 (isPrivateIp CGNAT+IPv4-mapped gaps),
+  PROMPT-INJECTION-0001 (tool-returned text bypasses all 4 guardrail middlewares →
+  cross-user 2nd-order injection), PROMPT-INJECTION-0002 (fail-open + regex-only),
+  BUSINESS-LOGIC-0001 (denial-of-wallet), C-0003 (no rate limiting).
+- **9 rejected** with cited controls (authz ×3, authn C-0004, excessive-agency ×3,
+  secrets ×2 — all correct FP calls). 1 duplicate (SSRF-0002 folded), 1 deps candidate.
+- SARIF 2.1.0 (3 results), report.md, redteam-plan.md (4 runtime directives, 3
+  static-settled, 1 gap), prior_context.json (12 items).
+- **Cost:** ~2,372,151 output tokens (~$15 est); investigate 1.02M dominated.
+
+**Precision/recall read:** signal-over-noise held — every confirmed finding is
+code-grounded with a tool receipt; the FP ladder + adversaries rejected 9 plausible
+candidates with cited controls and correctly refused to over-confirm the 5
+runtime-dependent ones. Two adversary passes materially improved data (architecture
+adversary killed a dead-code sink; redteam adversary fixed 2 broken payloads).
+
+## Summary & triage (as of Run 1)
+
+23 issues: **2 fixed inline** (001 graph O(n²) → 134×; 002 Workspace str-coercion),
+**21 batched** for triage. Highest-priority batched:
+- **011 (recall-critical):** high-sev CodeQL findings silently demoted via `unknown`.
+- **009 (recall-critical):** subagent Write hard-blocks findings/report paths.
+- **015 (robustness):** one malformed finding crashes `read_findings` → pipeline halt.
+- **008 / 021 / 013+019:** free-text phase-gate has no claim extractor; verify re-runs
+  only semgrep (CodeQL findings never verify-fixed); absence-of-control findings
+  structurally capped below confirmed.
+
+Awaiting: (a) triage/approval of the batched fixes → TDD cycle; (b) go-ahead for
+Run 2 (accounting-integrations) + Run 3 (ai-scheduler, scoped).
 
 ## Detail
 
