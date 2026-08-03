@@ -168,3 +168,22 @@ def test_ensure_creates_runs(tmp_path):
     ws = Workspace(tmp_path)
     ws.ensure()
     assert ws.runs.is_dir()
+
+
+def test_read_findings_skips_malformed_without_crashing(tmp_path, capsys):
+    """One malformed finding must not crash the pipeline (dogfood ISSUE-015).
+
+    read_findings returns the parseable findings and warns (to stderr) about the
+    skipped file, rather than raising and halting every downstream phase.
+    """
+    ws = Workspace(tmp_path)
+    write_findings(ws, [_finding("F-1")])
+    # a finding with an out-of-enum severity (exactly what an agent emitted)
+    (ws.findings_dir / "BAD.json").write_text(
+        json.dumps({"id": "BAD", "rule_id": "r", "cls": "sqli", "status": "raw",
+                    "severity": "informational", "file": "a.py", "line": 1, "message": "m"})
+    )
+    findings = read_findings(ws)  # must NOT raise
+    assert [f.id for f in findings] == ["F-1"]
+    err = capsys.readouterr().err
+    assert "BAD.json" in err

@@ -1,6 +1,25 @@
 """Tests for the unified CWE->attack-class mapping."""
 
-from sec_harness.clsmap import cls_from_cwe, cls_from_semgrep_meta
+from sec_harness.clsmap import (
+    cls_from_cwe,
+    cls_from_rule_id,
+    cls_from_semgrep_meta,
+    is_noise_class,
+)
+
+
+def test_codeql_resource_rules_route_to_resource_not_unknown():
+    """High-severity CodeQL resource/DoS rules must route to `resource`, not
+    fall to `unknown` and get demoted as noise (dogfood ISSUE-011)."""
+    assert cls_from_rule_id("js/loop-bound-injection") == "resource"
+    assert cls_from_rule_id("js/missing-rate-limiting") == "resource"
+    assert cls_from_rule_id("py/polynomial-redos") == "resource"
+    # and their CWE tags map too
+    assert cls_from_cwe(["external/cwe/cwe-770"]) == "resource"
+    assert cls_from_cwe(["CWE-400: Uncontrolled Resource Consumption"]) == "resource"
+    assert cls_from_cwe(["external/cwe/cwe-834"]) == "resource"
+    # resource is not a noise class -> not demoted
+    assert not is_noise_class("resource")
 
 
 def test_cls_from_cwe_formats():

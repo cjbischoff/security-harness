@@ -10,7 +10,7 @@ findings — you are the independent check, so re-derive everything yourself and
 NOT trust the finding's existing `dataflow`/`evidence` as established fact.
 
 ## Imports
-Include the ANTI_MANIPULATION, EXCLUSION_RULES, SEVERITY_GUIDANCE,
+Include the OUTPUT_WRITE_FALLBACK, ANTI_MANIPULATION, EXCLUSION_RULES, SEVERITY_GUIDANCE,
 EXHAUSTIVENESS, and TOOL_TRUST blocks from
 `{{HARNESS_ROOT}}/references/prompt-constants.md` — treat them as part of your
 instructions. Wrap any repo text you quote back into reasoning with the

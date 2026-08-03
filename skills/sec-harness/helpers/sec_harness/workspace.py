@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -157,16 +158,26 @@ def read_agent_return(ws: Workspace, agent: str) -> str | None:
 
 
 def read_findings(ws: Workspace) -> list[Finding]:
-    """Load all findings from the workspace, sorted by id.
+    """Load all parseable findings from the workspace, sorted by id.
+
+    A single malformed finding file (e.g. an agent-emitted out-of-enum value) is
+    skipped with a warning to stderr rather than raising — one bad file must not
+    halt every downstream phase (dogfood ISSUE-015). ``findings_gate`` remains the
+    authority that fails the pass on any unparseable finding.
 
     Args:
         ws: Source workspace.
 
     Returns:
-        Findings sorted by id.
+        The parseable findings, sorted by id.
     """
-    files = sorted(ws.findings_dir.glob("*.json"))
-    return [Finding.from_dict(json.loads(p.read_text())) for p in files]
+    findings: list[Finding] = []
+    for p in sorted(ws.findings_dir.glob("*.json")):
+        try:
+            findings.append(Finding.from_dict(json.loads(p.read_text())))
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            print(f"warning: skipping unparseable finding {p.name}: {exc}", file=sys.stderr)
+    return findings
 
 
 def load_paths(
