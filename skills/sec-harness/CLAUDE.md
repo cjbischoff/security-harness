@@ -112,7 +112,7 @@ Legend: `<T>` = target repo, `<WS>` = workspace, `<sha>` = `git -C <T> rev-parse
 1  Begin pass       sec_harness.state.begin_pass(WS, sha)  # pins SHA, increments pass counter
 C1 Context-ingest   agents/context-ingest.md (sonnet) → context-adversary.md (opus)   # repo docs as UNTRUSTED
 T1 Tier-1 substrate  python -m sec_harness.graph build --target <T> --workspace <WS> --sha <sha>
-                     # LLM-free: structural_index + ast-grep nodes/edges + osv/secrets/crypto facts
+                     # LLM-free: structural_index + regex call-edge heuristic + osv/secrets/crypto facts
                      # → kb/graph.json v1 (consumed by recon, architecture, threat-model)
 2  Recon            agents/recon.md (sonnet)     → kb/scan-profile.json     ┐
 3  Architecture     agents/architecture.md (sonnet) → kb/architecture.md    ├ each → PHASE GATE

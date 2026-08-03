@@ -162,6 +162,16 @@ def test_merge_tier2_ignores_non_taint_candidates():
     assert not any(e.kind == "taint" for e in graph.edges)
 
 
+def test_taint_id_helpers_match_merge_tier2():
+    graph = g.build_tier1(FIXTURE, sha="x")
+    cand = _candidate(file="app/db.py", line=1)
+    g.merge_tier2(graph, [cand], taint_langs=["py"])
+    taint_edges = [e for e in graph.edges if e.kind == "taint"]
+    assert len(taint_edges) == 1
+    assert taint_edges[0].src == g.taint_source_id(cand)
+    assert taint_edges[0].dst == g.taint_sink_id(cand)
+
+
 def test_cli_build_writes_graph(tmp_path):
     ws_root = tmp_path / "ws"
     rc = g.main(["build", "--target", str(FIXTURE),

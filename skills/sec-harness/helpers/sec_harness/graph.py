@@ -43,7 +43,10 @@ class Node:
 
 @dataclass
 class Edge:
-    """A directed relation between two nodes (``calls``/``imports``/``taint``)."""
+    """A directed relation between two nodes (``calls``/``imports``/``taint``).
+
+    ``imports`` is reserved for forward compatibility; Tier-1/Tier-2 do not emit it today.
+    """
 
     src: str
     dst: str
@@ -345,8 +348,45 @@ def _ensure_node(graph: Graph, node_id: str, kind: str, file: str, line: int) ->
         )
 
 
+def taint_sink_id(cand) -> str:
+    """Return the canonical Tier-2 sink node id for a taint candidate.
+
+    This is the SAME derivation :func:`merge_tier2` uses to mint the sink node. Any
+    consumer (e.g. :func:`no_path`) that hand-derives this id instead of calling this
+    helper risks a one-component drift that finds no taint edge and mints a false
+    ``structural-index:no-path`` clean-disproof receipt for a finding with a real path.
+
+    Args:
+        cand: A prefilter candidate (``Finding``) with ``file``/``line``.
+
+    Returns:
+        The sink node id.
+    """
+    return f"{cand.file}:{cand.line}:{cand.file.rsplit('/', 1)[-1]}"
+
+
+def taint_source_id(cand) -> str:
+    """Return the canonical synthetic external-source node id for a taint candidate.
+
+    Callers MUST use this (not a hand-derived string) to stay aligned with
+    :func:`merge_tier2` — see :func:`taint_sink_id` for the false-disproof risk this
+    shared derivation avoids.
+
+    Args:
+        cand: A prefilter candidate (``Finding``) with ``file``.
+
+    Returns:
+        The synthetic source node id.
+    """
+    return f"external:{cand.file}:0:external"
+
+
 def merge_tier2(graph: Graph, candidates: list, taint_langs: list[str]) -> None:
     """Merge CodeQL/semgrep taint dataflow edges into the substrate (Tier-2).
+
+    The taint edge is a single-hop external->sink abstraction: the frozen ``Finding``
+    carries no dataflow source location, so it is sufficient for the ``no_path`` honesty
+    gate but does not reconstruct multi-hop dataflow.
 
     Args:
         graph: The Tier-1 substrate to upgrade in place.
@@ -359,9 +399,8 @@ def merge_tier2(graph: Graph, candidates: list, taint_langs: list[str]) -> None:
         sources = list(getattr(cand, "evidence_sources", []) or [])
         if not _taint_receipt(sources):
             continue
-        sink_id = f"{cand.file}:{cand.line}:{cand.file.rsplit('/', 1)[-1]}"
-        src_file = f"external:{cand.file}"
-        src_id = f"{src_file}:0:external"
+        sink_id = taint_sink_id(cand)
+        src_id = taint_source_id(cand)
         _ensure_node(graph, sink_id, "sink", cand.file, cand.line)
         _ensure_node(graph, src_id, "source", cand.file, 0)
         graph.edges.append(Edge(src_id, sink_id, "taint"))
