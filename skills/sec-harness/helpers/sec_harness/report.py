@@ -6,10 +6,12 @@ import argparse
 import json
 from collections import Counter
 
+from sec_harness import cost
 from sec_harness.coverage_ledger import render_markdown as render_coverage_ledger
 from sec_harness.evidence import is_tool_receipt
 from sec_harness.models import Finding, FindingStatus
 from sec_harness.sarif import to_sarif
+from sec_harness.state import load_state
 from sec_harness.workspace import Workspace, load_paths, read_findings
 
 _ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
@@ -203,8 +205,10 @@ def write_report(ws: Workspace) -> dict:
     cl_path = ws.kb / "coverage-ledger.json"
     coverage_ledger = json.loads(cl_path.read_text()) if cl_path.exists() else None
     has_redteam_plan = (ws.reports / "redteam-plan.md").exists()
+    token_spend = cost.aggregate_by_phase(load_state(ws)) or None
     ws.sarif_path.write_text(json.dumps(to_sarif(reportable), indent=2))
-    ws.report_path.write_text(to_markdown(reportable, needs_deployment=ndt, coverage=coverage,
+    ws.report_path.write_text(to_markdown(reportable, token_spend=token_spend, needs_deployment=ndt,
+                                          coverage=coverage,
                                           coverage_ledger=coverage_ledger,
                                           has_redteam_plan=has_redteam_plan))
     ws.findings_json_path.write_text(json.dumps([f.to_dict() for f in reportable], indent=2))

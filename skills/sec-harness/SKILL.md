@@ -106,6 +106,11 @@ T1. **Tier-1 substrate** (no LLM) — `python -m sec_harness.graph build --targe
 For repeat passes see **Phase 6** (incremental scoping + carry-forward). The per-phase
 sections below detail each step.
 
+**Cost-recording convention:** after each subagent completes, the orchestrator records its token
+usage with `cost.record_agent(state, <phase>, <model>, <tokens>)` and `save_state`; the final
+report renders measured per-phase token totals ("Token spend by phase"). USD is an opt-in
+estimate (`cost.estimate_cost_usd`), never shown as a measured figure.
+
 ## Phase 0–1: Knowledge Base build + threat model (agentic)
 
 Run BEFORE the deterministic scan so the profile can guide later phases. The main
