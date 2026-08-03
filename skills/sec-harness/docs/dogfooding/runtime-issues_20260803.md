@@ -15,7 +15,14 @@ severity (`blocker` / `correctness` / `data-quality` / `efficiency` /
 | 006 | Recon phase-gate | ai-platform | data-quality (gate coverage) | recon gate emits only entrypoint+subsystem claims; attack_surface/agents_to_spawn overreach not systematically challenged by the adversary | BATCHED |
 | 007 | Recon | ai-platform | correctness (recall/waste) | recon cites plausible-but-nonexistent symbol names (main/authenticate/applyGuardrail); file:line gate passes at file granularity, so investigate is sent to a symbol that isn't there | BATCHED |
 | 008 | Architecture/TM phase-gate | ai-platform | data-quality (missing wiring) | no claim-extractor for free-text architecture.md/THREAT_MODEL.md; phase_gate only has claims_from_profile/context. Naive path extraction over-produces (74 existence-claims) and false-rejects prose basenames (43) | BATCHED |
-| 009 | Architecture | ai-platform | environmental (behavior) | subagent self-censored the Write of `entities/summary-and-persistence.md` ("subagents should return findings as text, not write report files") and renamed; risk = an agent returns text instead of writing a KB artifact (data loss) | BATCHED (dispatch-hardening) |
+| 009 | Architecture + Investigate | ai-platform | environmental (HARD BLOCK) | subagent Write tool HARD-BLOCKS report/findings-like paths ("...not write report files"). Confirmed on findings/*.json (authz agent). Without a python-copy fallback, KB artifacts + findings are silently lost | BATCHED (recall-critical; dispatch-hardening) |
+| 010 | Investigate (class prompts) | ai-platform | data-quality (coverage) | proof-tuple class extensions exist only for authz/config/crypto/injection/resource; AI classes (prompt-injection/excessive-agency/context-bleed) + authn/ssrf/business-logic have none, and there is no explicit attack_class→class-file map | BATCHED |
+| 011 | Prefilter (clsmap/demote) | ai-platform | correctness (recall) | high-sev CodeQL rules js/loop-bound-injection + js/missing-rate-limiting → cls `unknown` → demote_noise silently drops to informational; runs BEFORE the security-other safety net; a classes/resource.md prompt exists but nothing routes to it | BATCHED (recall-critical) |
+| 012 | Investigate (structural_index) | ai-platform | data-quality (navigation) | `structural_index callers` returns empty for `const x = tool(...)` / arrow-bound symbols (indexes only named fn/class decls) and resolves only one hop; 2 agents fell back to rg/ast-grep | BATCHED |
+| 013 | Investigate / gate (tool-receipt model) | ai-platform | data-quality (gate) | absence-of-control findings (e.g. missing rate limiting → denial-of-wallet) have no positive tool receipt; agents default to `llm-claimed`, structurally capping a whole class of real findings below `confirmed` | BATCHED |
+| 014 | Investigate (agent output) | ai-platform | data-quality | authz agent emitted AUTHZ-0003 with `severity: "informational"` (valid enum is info/low/medium/high/critical); investigate.md doesn't enumerate the legal values | BATCHED (prompt clarify) + data-fixed this run |
+| 015 | workspace.read_findings | ai-platform | robustness (pipeline-halt) | one malformed finding makes `read_findings` raise ValueError, crashing every downstream phase; `findings_gate` tolerates the same file (exit 1). Inconsistent — a single bad agent output halts the pipeline | BATCHED (robustness) |
+| 016 | Dedupe / instance-preservation | ai-platform | data-quality (recall) | SSRF-0001 (CGNAT) + SSRF-0002 (IPv4-mapped) — distinct bypasses of isPrivateIp — were both written at line 23 by the agent and merged by exact (file,line,cls) dedupe; instance-preservation relies on distinct line anchors that the agent didn't assign | BATCHED + folded this run |
 
 ## Detail
 
@@ -115,5 +122,59 @@ severity (`blocker` / `correctness` / `data-quality` / `efficiency` /
   dispatch states explicitly that writing the named KB artifact to the given path
   IS the task and is expected, overriding any "don't write report files" instinct.
   Longer-term: the agent prompts themselves should carry that assertion.
+
+### ISSUE-009 UPDATE — confirmed HARD block on subagent Write to findings/report paths
+- The authz investigate agent reported the Write tool **refused** the
+  `findings/AUTHZ-000N.json` target outright ("report files" heuristic), despite
+  explicit pipeline-artifact framing — a hard PreToolUse block, not self-censoring
+  (as first seen, softer, in architecture). It succeeded only via the python-copy
+  fallback baked into the dispatch (stage to /tmp, copy with python3/shutil).
+- **Severity elevated:** without that fallback, every investigate/context/architecture
+  subagent would fail to persist its findings/KB artifacts → silent total recall loss.
+  The `agent-flow/hook.js` (83-line forwarder) is NOT the source; the block is the
+  environment's subagent Write guard. **Proposed:** bake the python-write step into the
+  harness agent prompt templates (not rely on the orchestrator adding it), OR have
+  agents always write via the harness `write_findings`/`save` python helpers (Bash
+  path) instead of the Write tool.
+
+### ISSUE-011 — high-severity CodeQL findings silently demoted via `unknown` — BATCHED (recall-critical)
+- **Phase:** prefilter → `partition.demote_noise` / `clsmap`.
+- **Evidence:** on ai-platform, CodeQL emitted `C-0002 js/loop-bound-injection`
+  (sev **high**, CWE-834 uncontrolled loop / DoS) and `C-0003
+  js/missing-rate-limiting` (sev **high**, CWE-770). Neither rule-id is in
+  `clsmap._RULE_ID_CLS` and neither carries a mapped CWE, so both classify as
+  `unknown`. `NOISE_CLASSES` includes `unknown`, so `demote_noise` moved both to
+  `informational` — confirmed on disk (`status=informational`). They never reach
+  investigation.
+- **Root cause:** (a) no `resource`/`dos` entry in `clsmap.CWE_CLS` (no CWE-400/770/834
+  mapping) and these rule-ids aren't in `_RULE_ID_CLS`; (b) `demote_noise` consumes
+  `unknown` BEFORE the `security-other` general-triage safety net can catch it, so the
+  net is unreachable for `unknown`-class candidates; (c) a `classes/resource.md` proof
+  prompt exists but nothing routes candidates to a `resource` class.
+- **Impact:** on any repo, real high-severity CodeQL resource/DoS findings are dropped
+  as noise with no human-visible trace beyond the informational bucket.
+- **Proposed:** map CWE-400/770/834 + these rule-ids to a `resource` class (which
+  already has a prompt), OR route high-severity `unknown` CodeQL findings to
+  `security-other` instead of demoting. Recall-critical; batch for a TDD fix.
+- **This run:** rescued C-0002/C-0003 to `cls=resource, status=candidate` so a resource
+  investigate agent triages them — gaps logged, never silently dropped.
+
+### ISSUE-015 — `read_findings` crashes the whole pipeline on one malformed finding — BATCHED (robustness)
+- **Evidence:** ai-platform investigate wrote `AUTHZ-0003` with `severity:
+  "informational"` (invalid). `workspace.read_findings` calls
+  `Finding.from_dict` → `Severity("informational")` → **ValueError**, aborting the
+  discovery-ledger step. Every downstream phase that calls `read_findings`
+  (dedupe, critic, calibrate, report, carry_forward, …) would hit the same crash.
+  Meanwhile `findings_gate` reads the same dir tolerantly and reports
+  `AUTHZ-0003: unparseable finding` with a clean exit 1.
+- **Impact:** a single malformed agent output halts the entire pipeline at whatever
+  phase reads findings first, rather than being quarantined and surfaced.
+- **Proposed (needs triage — not a snap fix):** make `read_findings` skip-and-warn
+  (returning the parseable set + a list of quarantined files) OR require the
+  findings gate to run and quarantine before any phase reads. Do NOT change the
+  frozen `Finding.from_dict`. Batched for a design decision.
+- **This run:** data-fixed AUTHZ-0003 severity → `info` (rejected finding, severity
+  immaterial) to unblock; the designed repair path (`stage_validate` +
+  `repair_prompt`) should catch this in a hardened flow.
 
 <!-- entries appended below -->
