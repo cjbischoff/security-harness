@@ -33,6 +33,7 @@ severity (`blocker` / `correctness` / `data-quality` / `efficiency` /
 | 024 | Recon (attack-class catalog) | accounting-integrations | data-quality (coverage) | no attack-class key for custom sandboxed-expression-evaluator / rules-engine formula RCE (lib/jsep-evaluator.js `callee.apply`); recon must freehand a note — not eval() nor ssti | BATCHED (catalog addition) |
 | 025 | Recon (authz detection) | accounting-integrations | data-quality (precision) | recon greps handler files for apiToken/isInvalidToken; misses the createBaseHandler factory indirection → 5 false authz-gap leads. Should trace one level of wrapper indirection or flag 'indirect dispatch, not verified' |
 | 026 | crypto_policy | accounting-integrations | data-quality (gate too narrow) | `_DENIED_ALGOS` bans only ecb; AES-CBC-without-AEAD and single-round-hash-as-KDF pass as {ok:true}, so real crypto weaknesses clear the mechanical gate |
+| 027 | Orchestration (validate→report) | ai-scheduler | wasted-effort (silent drop risk) | `campaign.promote_runtime_dependent` is a standalone step not invoked by `findings_gate`/`calibrate`; if the driver forgets it, runtime_dependent findings stay `raw` and never reach redteam-plan / report NDT section | BATCHED (wire into gate or document as required step) |
 
 ## Run 1 — ai-platform: pipeline result (shakedown complete)
 
@@ -266,9 +267,63 @@ pattern-matching thesis working on a real codebase.
 New issues this run: **024** (no attack-class for expression-evaluator RCE),
 **025** (recon authz grep misses factory indirection), **026** (crypto_policy too narrow).
 
-## Run 3 — ai-scheduler (105M): NOT RUN
+## Run 3 — ai-scheduler (105M, Python-Tornado + TS/React): COMPLETE (scoped/lighter depth)
 
-Deferred to a fresh session: this shakedown ran the full pipeline on Run 1 and a
-lighter full pass on Run 2, consuming the working context. Run 3 (105M, Py+TS) needs
-recon-driven subsystem scoping and its own multi-hour, ~2M-token budget. The three
-inline fixes are committed and validated at scale, so Run 3 starts clean.
+Full agentic pipeline, recon-driven subsystem scoping. SHA
+`2f2227756ead408556a4c84166bac5e502c79ef8`, pass 1, workspace
+`.sec-harness/ai-scheduler-962f75b4`.
+
+**Pipeline run:** graph (5.3s, 7652 nodes/88799 edges — fix 001 holds at 105M) →
+recon → architecture → threat-model → prefilter → 4 scoped investigate agents
+(sonnet, parallel) → validate (opus, refute) → calibrate → redteam → report →
+postflight. Stages recorded: prefilter, architecture, threat_model, investigate,
+validate, calibrate, redteam, report.
+
+**Prefilter coverage (hard-rule check):** all 4 planned backends ran —
+`backends_run: [semgrep, secrets, codeql, sca]`, `failed: []`, `skipped: []`. **No
+coverage hole.** 32 candidates after 669 non-security drops + 14 demotions (1583s).
+
+**Recon/architecture caught its own error:** recon hypothesized CRDT had no
+account-scoping; architecture proved scoping IS centrally enforced at
+`CRDTKey._build_uri` and redirected the hunt to the real residual (unvalidated
+entity_id → fs path under a debug flag). Architecture also flagged the MCP write-tool
+catalog as likely unreachable and told investigate to verify the negative first.
+
+**Audit output** (`.sec-harness/ai-scheduler-962f75b4/`):
+- **3 confirmed** (static-settled) — **C-0028 (MED, risk 4)** authenticated info-leak:
+  `str(e)` returned verbatim in 500 body (`server/api/base.py:115`); **AUTHZ-0001
+  (LOW, risk 4)** process-wide filter-refresh lock not account-keyed → cross-tenant
+  availability coupling (`server/api/filter.py:40`); **C-0029 (LOW, risk 2)** appointment/
+  customer titles persisted plaintext in localStorage (`editor-window.tsx:106`).
+- **2 needs-deployment-testing** — **AUTHZ-0002 (MED)** appointment write authz fully
+  delegated to ServiceTrade, no local `appointment_id`↔account re-check — silent-BOLA
+  pattern needing a live-ST cross-account test; **AUTHN-0001 (LOW)** WS bearer travels in
+  `Sec-WebSocket-Protocol` request header (server never echoes it) — residual proxy/LB
+  handshake-header logging risk unverifiable from source.
+- **Rejected with cited controls:** PATHTRAV-0001 (3 independent controls defeat traversal),
+  C-0010 md5 (**dead code — zero callers**), C-0032 (Pendo public agent key, ships client-side
+  by design), C-0001/C-0030/C-0031 (playwright/CI/test-only, not shipped); board.py BOLA and
+  admin.py BFLA refuted with account-scoping / whitelist citations (no candidate written).
+- **MCP prompt-injection:** catalog **confirmed unreachable** (Gate-1 fail, `ripgrep:sanity`
+  no callers — only `get_tech`/`respond` wired to the live LangGraph agent). Avoided a false
+  RCE finding; `ModifyVisitDependencies.py`'s missing account-recheck is real *code* but
+  architecturally dead — logged as a latent risk if ever wired up.
+- SARIF (3 results) + report.md + redteam-plan.md (1 needs-runtime, 1 below-bar, 3
+  static-settled) + prior_context.json (9 items) produced.
+
+**Signal read:** on a third real codebase the harness rejected the entire test/CI/dead-code
+bucket with cited controls, corrected a recon assumption via the architecture gate, and
+declined a tempting-but-unreachable MCP RCE — while still surfacing an authenticated
+info-leak and a genuine silent-BOLA lead for runtime testing. Exploitability-over-pattern
+holds across all three targets.
+
+New issue this run: **027** (`promote_runtime_dependent` is a manual orchestration step
+between validate and report — not invoked by `findings_gate` or `calibrate`; if the driver
+forgets it, runtime_dependent findings silently stay `raw` and never reach the redteam plan
+/ report NDT section).
+
+**Lighter-depth scope notes (not defects):** critic/judge FP-ladder rungs folded into the
+opus validate pass; redteam ran the deterministic module only (not `redteam.md` agent), so
+the NDT plan's objective is populated but payload/precondition/telemetry fields read
+"not specified"; "recon" stage not separately recorded (output present). These are the
+approved lighter-depth tradeoffs for runs 2–3, not runtime issues.
