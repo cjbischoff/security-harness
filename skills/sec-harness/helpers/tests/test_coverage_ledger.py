@@ -21,6 +21,18 @@ def test_consistent_complete_ledger_is_valid():
     assert validate_coverage_ledger(d) == []
 
 
+def test_complete_forbids_nonempty_open_questions():
+    d = _ledger("complete", [{"id": "auth", "disposition": "reported"}])
+    d["open_questions"] = ["is the admin route reachable unauthenticated?"]
+    assert any("open_questions" in e for e in validate_coverage_ledger(d))
+
+
+def test_bad_open_questions_type_flagged():
+    d = _ledger("partial", [{"id": "auth", "disposition": "reported"}])
+    d["open_questions"] = "not-a-list"
+    assert any("open_questions" in e for e in validate_coverage_ledger(d))
+
+
 def test_bad_disposition_flagged():
     d = _ledger("partial", [{"id": "auth", "disposition": "bogus"}])
     assert any("disposition" in e for e in validate_coverage_ledger(d))

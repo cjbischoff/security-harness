@@ -145,7 +145,8 @@ from claiming full coverage while surfaces remain unexamined.
 `deferred[]`, `open_questions[]`, and `completeness` ∈ {complete, partial,
 unknown}. Hand-written `validate_coverage_ledger(d) -> list[str]` (matching the
 `validate_profile` idiom) enforces codex's invariant: **`completeness=="complete"`
-is an error when any surface is `needs_follow_up` or `deferred` is non-empty.**
+is an error when any surface is `needs_follow_up`, `deferred` is non-empty, or
+`open_questions` is non-empty.**
 Wired into `stage_validate.py`. Complements — does not replace — `coverage.py`'s
 per-language tier accounting. `report.py` renders the ledger (deferred surfaces
 and open questions become a visible "coverage gaps" section).

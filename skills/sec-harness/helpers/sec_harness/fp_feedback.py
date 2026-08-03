@@ -26,7 +26,7 @@ def render_fp_feedback(ws: Workspace, *, cap: int = 50) -> str:
 
     Args:
         ws: Workspace to read prior findings from.
-        cap: Maximum examples to include (most recent by id order, capped).
+        cap: Maximum examples to include (first ``cap`` unique findings in ascending id order).
 
     Returns:
         An ``<untrusted>``-wrapped block, or ``""`` when there are no rejected findings.
