@@ -80,3 +80,13 @@ to generate candidates within a class, not as a substitute for one.
     independent verification. Example: a request header `X-User-Role: admin`
     set by an internal gateway is trusted by the backend with no check that the
     request actually came through that gateway.
+
+## Discovery convergence
+
+Applying these heuristics is open-ended — investigate runs as a bounded saturation
+loop instead of a fixed number of passes. Each discovery wave's candidate
+fingerprints fold into `kb/discovery-ledger.json`; the loop stops when
+`terminal_reason` is set — `saturated` (K=2 consecutive waves added no new
+fingerprints) or `capped` (max_waves=5), whichever comes first. Saturation is a
+recall floor, not a substitute for the adversarial coverage gate, which still runs
+after the loop ends.

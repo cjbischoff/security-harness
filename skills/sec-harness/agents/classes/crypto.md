@@ -16,3 +16,12 @@ denied key source (literal/hardcoded/filesystem) is a violation — cite it in t
 ## FP traps
 md5/sha1 used as a non-security checksum/cache-key/dedup id is NOT a finding (verify the
 use). A weak algo behind an approved outer layer may be defense-in-depth, not exploitable.
+
+## Proof tuple (required evidence)
+
+A confirmable crypto weakness needs all three, each with a `file:line`:
+1. **Sensitive use** — the value protected is a secret, token, password, or signature (not a checksum/cache-key/dedup id).
+2. **Weak primitive or key source** — a denied algo, sub-floor param, or denied key source per the mechanical policy gate above (defer the pass/fail call to `crypto_policy.check`).
+3. **Attacker benefit** — the weakness is exploitable by an attacker in this context (forgeable signature, recoverable plaintext, brute-forceable key).
+
+**Instance preservation:** do NOT collapse sibling instances that share a CWE but hit distinct concrete sinks/routes into one finding. Expand every concrete instance as its own candidate; dedupe merges only exact `(file,line,cls)` collisions.

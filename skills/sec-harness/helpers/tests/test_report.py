@@ -154,3 +154,26 @@ def test_report_links_redteam_plan_and_shows_receipts(tmp_path):
     md = (ws.reports / "report.md").read_text()
     assert "redteam-plan.md" in md            # T11a: link the manual test plan
     assert "ripgrep:a.py:1" in md             # T11b: receipts visible even in condensed (medium) tier
+
+
+def test_to_markdown_renders_coverage_ledger():
+    from sec_harness.report import to_markdown
+    led = {"completeness": "partial", "surfaces": [{"id": "auth", "disposition": "reported"}],
+           "deferred": ["liquid templates"]}
+    md = to_markdown([], coverage_ledger=led)
+    assert "Coverage completeness" in md and "liquid templates" in md
+
+
+def test_write_report_renders_token_spend(tmp_path):
+    from sec_harness import cost
+    from sec_harness.report import write_report
+    from sec_harness.state import load_state, save_state
+    from sec_harness.workspace import Workspace, write_findings
+    ws = Workspace(root=tmp_path / "ws"); ws.ensure()
+    write_findings(ws, [])
+    st = load_state(ws)
+    cost.record_agent(st, "investigate", "sonnet", 1234)
+    save_state(ws, st)
+    write_report(ws)
+    assert "Token spend by phase" in ws.report_path.read_text()
+    assert "1234" in ws.report_path.read_text()

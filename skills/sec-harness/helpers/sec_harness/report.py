@@ -6,9 +6,12 @@ import argparse
 import json
 from collections import Counter
 
+from sec_harness import cost
+from sec_harness.coverage_ledger import render_markdown as render_coverage_ledger
 from sec_harness.evidence import is_tool_receipt
 from sec_harness.models import Finding, FindingStatus
 from sec_harness.sarif import to_sarif
+from sec_harness.state import load_state
 from sec_harness.workspace import Workspace, load_paths, read_findings
 
 _ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
@@ -91,7 +94,8 @@ def render_finding(f: Finding) -> str:
 
 def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = None,
                 needs_deployment: list[Finding] | None = None,
-                coverage: dict | None = None, has_redteam_plan: bool = False) -> str:
+                coverage: dict | None = None, coverage_ledger: dict | None = None,
+                has_redteam_plan: bool = False) -> str:
     """Render findings and optional token accounting as Markdown.
 
     The findings table includes Risk (calibrated 1-10 score) and Verification
@@ -104,6 +108,8 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
         coverage: Optional ``compute_coverage`` output (``kb/coverage.json``); when given,
             appends a "Coverage & limitations" section so a clean scan carries its
             denominator (O-007/O-033). Omitted entirely when ``None``.
+        coverage_ledger: Optional coverage-completeness ledger (``kb/coverage-ledger.json``);
+            when given, appends a "Coverage completeness" section. Omitted when ``None``.
         has_redteam_plan: True when ``redteam-plan.md`` exists in the reports dir; adds a
             "Manual runtime testing" section pointing the engineer at it (O-022).
 
@@ -154,6 +160,8 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
         lines += ["", "## Manual runtime testing", "",
                   ("See `redteam-plan.md` for the runtime test directives "
                    "(needs-runtime findings).")]
+    if coverage_ledger:
+        lines += ["", render_coverage_ledger(coverage_ledger)]
     if token_spend:
         lines += ["", "## Token spend by phase", ""]
         lines += [f"- **{phase}**: {n}" for phase, n in token_spend.items()]
@@ -194,9 +202,14 @@ def write_report(ws: Workspace) -> dict:
     ndt = [f for f in all_findings if f.status is FindingStatus.NEEDS_DEPLOYMENT_TESTING]
     coverage_path = ws.kb / "coverage.json"
     coverage = json.loads(coverage_path.read_text()) if coverage_path.exists() else None
+    cl_path = ws.kb / "coverage-ledger.json"
+    coverage_ledger = json.loads(cl_path.read_text()) if cl_path.exists() else None
     has_redteam_plan = (ws.reports / "redteam-plan.md").exists()
+    token_spend = cost.aggregate_by_phase(load_state(ws)) or None
     ws.sarif_path.write_text(json.dumps(to_sarif(reportable), indent=2))
-    ws.report_path.write_text(to_markdown(reportable, needs_deployment=ndt, coverage=coverage,
+    ws.report_path.write_text(to_markdown(reportable, token_spend=token_spend, needs_deployment=ndt,
+                                          coverage=coverage,
+                                          coverage_ledger=coverage_ledger,
                                           has_redteam_plan=has_redteam_plan))
     ws.findings_json_path.write_text(json.dumps([f.to_dict() for f in reportable], indent=2))
     return {"reported": len(reportable), "sarif": str(ws.sarif_path), "report": str(ws.report_path)}

@@ -287,6 +287,30 @@ def is_unresolvable(graph: Graph, node_id: str) -> bool:
     return bool(n and n.attrs.get("unresolvable", False))
 
 
+def symbol_at(graph: Graph, file: str, line: int) -> str | None:
+    """Return the name of the symbol enclosing ``file:line``, or ``None``.
+
+    The enclosing symbol is the nearest ``symbol`` node in ``file`` whose definition
+    line is at or before ``line``. Used to derive a refactor-resistant finding anchor
+    (line-independent identity) from the Tier-1 substrate.
+
+    Args:
+        graph: The evidence substrate.
+        file: Repo-relative path of the location.
+        line: 1-indexed line number of the location.
+
+    Returns:
+        The enclosing symbol's ``name``, or ``None`` when no definition precedes it.
+    """
+    best: Node | None = None
+    for n in graph.nodes:
+        if n.kind == "symbol" and n.file == file and n.line <= line and (
+            best is None or n.line > best.line
+        ):
+            best = n
+    return best.name if best else None
+
+
 @dataclass
 class NoPathResult:
     """Result of a :func:`no_path` disproof query.
