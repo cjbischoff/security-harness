@@ -219,6 +219,12 @@ Run AFTER the KB build. Prerequisites in the workspace: `kb/scan-profile.json`,
    patch viability, and false-positive likelihood.
    On pass N>1, fill `{{FP_FEEDBACK}}` with `fp_feedback.render_fp_feedback(ws)` output
    (empty string on pass 1 or when there are no prior rejections).
+   Investigate runs as a bounded saturation loop: after each discovery wave, fold the
+   wave's candidate fingerprints into `kb/discovery-ledger.json`
+   (`discovery_ledger.record_wave`) and stop when `terminal_reason` is set — `saturated`
+   (K=2 consecutive waves added no new fingerprints) or `capped` (max_waves=5). The
+   adversarial coverage gate still runs after the loop; saturation is a recall floor, not
+   a replacement for it.
 3. **Gate** (no LLM): validate all findings conform:
    `uv run python -m sec_harness.findings_gate --workspace <WS>` (exit 1 on any invalid finding).
 
