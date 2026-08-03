@@ -33,9 +33,9 @@ agents/                      LLM agent prompts: recon, architecture, threat-mode
 references/                  attack-classes.md, prompt-constants.md, finding-template.md,
                              hunting/ (domain knowledge), asvs/ + codeguard/ (compliance
                              corpora), approved-crypto-*.yaml, DETECTION_COVERAGE.md, schemas
-helpers/sec_harness/         the deterministic Python core (46 modules)
+helpers/sec_harness/         the deterministic Python core (62 modules)
 helpers/bench/               dev-only evaluation harness (not part of a scan)
-helpers/tests/               242 pytest tests
+helpers/tests/               370 pytest tests
 ```
 
 ## Pipeline (per SKILL.md)
@@ -60,9 +60,14 @@ helpers/tests/               242 pytest tests
    secrets concurrently; classifies via `clsmap`; **never-silent** (any declared backend
    that doesn't run is recorded). Optional ASVS/CodeGuard `rule_matcher` pre-filter.
 6. **Investigate** (sonnet, parallel per class) — gate ladder (−1 sanity … 3 new
-   capability); confirmed → `raw`.
+   capability); confirmed → `raw`. Runs as a **loop-until-dry** saturation loop: waves
+   dispatch until K consecutive waves add no new fingerprints (`saturated`) or a cap
+   (`capped`), tracked in `kb/discovery-ledger.json`. On pass N>1, prior `rejected`
+   findings are injected as envelope-wrapped negative examples (`fp_feedback`).
 7–10. **FP ladder** — dedupe → critic → **adversarial-validate (opus)** → calibrate.
-   Citations (ASVS/CodeGuard) auto-attach at calibrate.
+   Citations (ASVS/CodeGuard) auto-attach at calibrate. Dedupe stamps a
+   **refactor-resistant fingerprint** (`rule_id|cls|enclosing-symbol` via the `graph`
+   substrate) so cross-pass diffing survives line shifts.
 10.5 **Fact-check** (F8) — a fresh agent re-verifies each written finding's citations/
    scope/severity against source.
 11–14. **Patch (opus) → validate-fix → verify (no LLM) → report** — verify applies the
@@ -138,11 +143,24 @@ python -m bench.run --corpus bench/corpus_seed --run-dir /tmp/bench --workspaces
   prompt-level, not a code-path gate; wire them into your driver if you need a hard guarantee.
 - Fix disposition (FULL/MITIGATION/WORKAROUND, cross-field-honest) + a fail-closed gate
   orchestrator + machine-checked crypto policy.
+- **Refactor-resistant finding identity + cross-session FP feedback** (adapted from
+  `@openai/codex-security`) — fingerprints key on the enclosing symbol, not the raw line,
+  so a finding survives line-shift refactors across passes; prior confirmed false positives
+  are recycled into the next pass's investigate/critic prompts as negative examples.
+- **Loop-until-dry discovery + coverage-completeness ledger** — investigate keeps hunting
+  until saturation (`kb/discovery-ledger.json`); a `kb/coverage-ledger.json` records surface
+  dispositions with a machine-checked invariant (`completeness=="complete"` is rejected while
+  any surface is `needs_follow_up`, or `deferred`/`open_questions` is non-empty), rendered in
+  `report.md`. Per-class **proof-tuples** + an instance-preservation rule keep sibling
+  vulnerabilities from being collapsed into one.
+- **Cost accounting** — `cost.py` aggregates per-phase token spend recorded into
+  `CampaignState.budget`; `report.md` shows measured token totals (USD is an opt-in estimate,
+  never presented as measured).
 
 ## Develop
 
 ```bash
-cd helpers && uv run pytest -q          # 242 tests
+cd helpers && uv run pytest -q          # 370 tests
 uv run ruff check sec_harness/ bench/ tests/
 ```
 

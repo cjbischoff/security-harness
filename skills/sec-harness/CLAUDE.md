@@ -120,8 +120,12 @@ T1 Tier-1 substrate  python -m sec_harness.graph build --target <T> --workspace 
 0.5 Tune (optional) agents/tune-config.md — ratcheted rule/exclusion loop, ≤3 rounds
 5  Prefilter        sec_harness.prefilter.run_prefilter(ws, target, profile) # semgrep+codeql+osv+secrets
 6  Investigate      agents/investigate.md (sonnet, PARALLEL per attack-class) → raw / rejected
+                    # loop-until-dry: waves until K no-new (saturated) or cap (capped) →
+                    #   kb/discovery-ledger.json (discovery_ledger); on pass N>1 prior rejects
+                    #   injected as envelope-wrapped negative examples (fp_feedback.{{FP_FEEDBACK}})
    Gate             python -m sec_harness.findings_gate --workspace <WS>
 7  Dedupe           python -m sec_harness.dedupe --workspace <WS>
+                    # stamps refactor-resistant fingerprint (rule_id|cls|enclosing-symbol via graph)
 8  Critic           agents/critic.md (sonnet, PARALLEL) — production-viability filter
    Judge            agents/judge.md (cheap, tool-free) — severity-inflation adjudicator
 9  Validate         agents/validate.md (opus, DIFFERENT family) — tries to REFUTE → confirmed / rejected
@@ -229,6 +233,8 @@ kb/architecture.md       component/data-flow/trust-boundary map + kb/entities/*.
 kb/THREAT_MODEL.md       trust boundaries, attacker profiles, PRIORITIZED HUNT LIST
 kb/context.json          repo's own docs distilled (trust-tagged untrusted-doc / prior-scan)
 kb/gates/<phase>.json    adversary verdict audit trail per gated phase
+kb/discovery-ledger.json investigate saturation state (waves, consecutive_no_new, terminal_reason)
+kb/coverage-ledger.json  surface-completeness ledger; `complete` machine-rejected while gaps remain
 findings/<ID>.json       every finding, all statuses — evidence_sources, reachability, cvss, patch_diff
 report.sarif             SARIF 2.1.0 (confirmed/fixed)
 report.md                human report (finding-template.md structure; links redteam-plan.md)
