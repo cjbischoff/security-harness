@@ -1,8 +1,13 @@
 """Tests for deterministic dedupe."""
 
+from pathlib import Path
+
+from sec_harness import graph as g
 from sec_harness.dedupe import dedupe_findings
 from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.workspace import Workspace, read_findings, write_findings
+
+FIXTURE = Path(__file__).parent / "fixtures" / "graph_target"
 
 
 def _f(id_, cls, file, line, sev, status=FindingStatus.RAW):
@@ -75,3 +80,19 @@ def test_dedupe_ignores_duplicate_of_pointing_nowhere(tmp_path):
     write_findings(ws, [dup])
     assert dedupe_findings(ws) == 0
     assert read_findings(ws)[0].status is FindingStatus.RAW
+
+
+def _raw(fid, line):
+    return Finding(id=fid, rule_id="r", cls="sqli", status=FindingStatus.RAW,
+                   severity=Severity.HIGH, file="app/db.py", line=line, message="m")
+
+
+def test_dedupe_stamps_symbol_anchored_fingerprint(tmp_path):
+    ws = Workspace(root=tmp_path / "ws")
+    ws.ensure()
+    g.save_graph(ws, g.build_tier1(FIXTURE, sha="x"))   # graph present
+    f1, f2 = _raw("F-1", 1), _raw("F-2", 3)             # same run_query symbol, diff lines
+    write_findings(ws, [f1, f2])
+    dedupe_findings(ws)
+    got = {f.id: f.fingerprint for f in read_findings(ws)}
+    assert got["F-1"] == got["F-2"]                     # anchored to run_query -> equal

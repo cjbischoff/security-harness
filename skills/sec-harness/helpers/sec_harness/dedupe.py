@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from sec_harness.fingerprint import fingerprint
+from sec_harness.graph import load_graph, symbol_at
 from sec_harness.models import Finding, FindingStatus
 from sec_harness.workspace import Workspace, read_findings, write_findings
 
@@ -42,10 +43,13 @@ def dedupe_findings(ws: Workspace) -> int:
             f.history.append({"event": f"duplicate_of:{f.duplicate_of}"})
             marked += 1
 
-    # Stamp every active finding with a stable fingerprint.
+    # Stamp every active finding with a stable fingerprint. Resolve a refactor-
+    # resistant anchor from the substrate when present.
+    graph = load_graph(ws) if (ws.kb / "graph.json").exists() else None
     for f in findings:
         if f.status in _ACTIVE:
-            f.fingerprint = fingerprint(f)
+            anchor = symbol_at(graph, f.file, f.line) if graph is not None else None
+            f.fingerprint = fingerprint(f, anchor=anchor)
     stamped = True
 
     groups: dict[tuple[str, int, str], list[Finding]] = {}
