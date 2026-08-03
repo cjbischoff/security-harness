@@ -87,6 +87,7 @@ substitute for reading the control; only the threat model's declared trust bound
      defeats the attack — the FP-needs-evidence rule above): set
      `status: "rejected"`, append `history`
      `{"event": "validate:rejected", "reason": "<one line citing file:line>"}`.
+     When rejecting, cite which element of the class proof tuple fails, with a `file:line`.
    - **Verify-error** (you could not complete the check — source unavailable,
      tool failed, output unparseable, or you cannot cite a defeating control
      but also cannot confirm): leave `status: "raw"` and set

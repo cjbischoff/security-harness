@@ -91,3 +91,12 @@ def test_fp_feedback_token_present_in_prompts():
     for name in ("investigate", "critic"):
         text = (root / "agents" / f"{name}.md").read_text()
         assert "{{FP_FEEDBACK}}" in text, f"{name}.md missing FP_FEEDBACK token"
+
+
+def test_class_prompts_carry_proof_tuple_and_anti_collapse():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]  # skills/sec-harness
+    for name in ("injection", "authz", "crypto", "config", "resource"):
+        text = (root / "agents" / "classes" / f"{name}.md").read_text().lower()
+        assert "proof tuple" in text, f"{name}.md missing proof tuple"
+        assert "instance" in text and "collapse" in text, f"{name}.md missing anti-collapse rule"

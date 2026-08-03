@@ -59,3 +59,10 @@ prior run.
     version, configuration) actually hold in this codebase — the same library
     used defensively, patched, or in an unreachable code path is not the same
     bug.
+
+11. **Instance collapse.** Under-reporting a family of sibling bugs — same CWE,
+    distinct concrete sinks/routes — as one representative finding. "Every
+    handler in this router has the same missing check" is five findings, not
+    one with an example. Expand every concrete instance into its own
+    candidate; let dedupe merge only exact `(file,line,cls)` collisions, never
+    a human summary of "the pattern."
