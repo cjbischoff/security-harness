@@ -154,3 +154,11 @@ def test_report_links_redteam_plan_and_shows_receipts(tmp_path):
     md = (ws.reports / "report.md").read_text()
     assert "redteam-plan.md" in md            # T11a: link the manual test plan
     assert "ripgrep:a.py:1" in md             # T11b: receipts visible even in condensed (medium) tier
+
+
+def test_to_markdown_renders_coverage_ledger():
+    from sec_harness.report import to_markdown
+    led = {"completeness": "partial", "surfaces": [{"id": "auth", "disposition": "reported"}],
+           "deferred": ["liquid templates"]}
+    md = to_markdown([], coverage_ledger=led)
+    assert "Coverage completeness" in md and "liquid templates" in md

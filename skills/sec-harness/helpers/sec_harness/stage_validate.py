@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 
 from sec_harness.context import Context
+from sec_harness.coverage_ledger import validate_coverage_ledger
 from sec_harness.discovery_ledger import validate_discovery_ledger
 from sec_harness.profile import validate_profile
 from sec_harness.reachability import validate_reachability
@@ -46,6 +47,7 @@ _VALIDATORS = {
     "reachability": validate_reachability,
     "runtime_test": _validate_runtime_test,
     "discovery-ledger": validate_discovery_ledger,
+    "coverage-ledger": validate_coverage_ledger,
 }
 
 
