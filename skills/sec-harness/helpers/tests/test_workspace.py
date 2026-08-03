@@ -1,6 +1,7 @@
 """Tests for Workspace path overrides."""
 
 import json
+from pathlib import Path
 
 from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.workspace import (
@@ -20,6 +21,24 @@ def test_defaults_unchanged(tmp_path):
     assert ws.findings_dir == tmp_path / "findings"
     assert ws.sarif_path == tmp_path / "report.sarif"
     assert ws.report_path == tmp_path / "report.md"
+
+
+def test_accepts_string_root(tmp_path):
+    """A str root is coerced to Path so agent-authored commands don't crash.
+
+    The agent prompts embed ``Workspace('<path>')`` with a bare string; without
+    coercion the first path property raises ``TypeError`` (str / str).
+    """
+    ws = Workspace(str(tmp_path))
+    assert ws.kb == tmp_path / "kb"
+    assert isinstance(ws.root, Path)
+
+
+def test_coerces_string_overrides(tmp_path):
+    """String override paths are coerced too."""
+    ws = Workspace(str(tmp_path), findings_dir_override=str(tmp_path / "f"))
+    assert ws.findings_dir == tmp_path / "f"
+    assert isinstance(ws.findings_dir, Path)
 
 
 def test_overrides(tmp_path):

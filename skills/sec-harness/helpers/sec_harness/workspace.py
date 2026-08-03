@@ -27,6 +27,14 @@ class Workspace:
     findings_dir_override: Path | None = None
     kb_dir_override: Path | None = None
 
+    def __post_init__(self) -> None:
+        """Coerce str paths to Path so agent-authored ``Workspace('<path>')`` works."""
+        self.root = Path(self.root)
+        for attr in ("reports_dir", "findings_dir_override", "kb_dir_override"):
+            value = getattr(self, attr)
+            if value is not None:
+                setattr(self, attr, Path(value))
+
     @property
     def kb(self) -> Path:
         """Knowledge-base directory (architecture, threat model, indexes)."""
