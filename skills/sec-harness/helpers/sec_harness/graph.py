@@ -28,6 +28,12 @@ NO_PATH_RECEIPT = "structural-index:no-path"
 _SOURCE_EXTS = {".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".java",
                 ".c", ".cc", ".cpp", ".rb", ".php"}
 
+# Call-edge detection helpers (see build_tier1). _CALL_TOKEN captures every
+# \w-identifier used as a call in a body; _WORD_NAME selects names for which
+# called-set membership is equivalent to the per-name \b<name>\s*\( regex.
+_CALL_TOKEN = re.compile(r"\b(\w+)\s*\(")
+_WORD_NAME = re.compile(r"\w+")
+
 
 @dataclass
 class Node:
@@ -173,12 +179,26 @@ def build_tier1(target_root: str | Path, sha: str) -> Graph:
             start, end = structural_index.get_function_boundary(path, line)
             bodies.append((node_id, str(path), start, end))
 
+    # Call-edge detection. Equivalent to matching r"\b<name>\s*\(" against each
+    # body for every known name, but without the O(bodies*names) fresh-regex
+    # compile that dominated large repos. For purely-\w names, membership in the
+    # body's called-token set (one finditer per body) is provably identical to
+    # that per-name regex; odd names (e.g. JS "$foo") keep a precompiled pattern.
+    word_names = {n for n in by_name if _WORD_NAME.fullmatch(n)}
+    odd_patterns = {
+        n: re.compile(r"\b" + re.escape(n) + r"\s*\(")
+        for n in by_name if n not in word_names
+    }
     edges: list[Edge] = []
     seen: set[tuple[str, str, str]] = set()
     for node_id, abspath, start, end in bodies:
         text = "\n".join(Path(abspath).read_text().splitlines()[start:end])
+        called = {m.group(1) for m in _CALL_TOKEN.finditer(text)}
         for callee_name, targets in by_name.items():
-            if not re.search(r"\b" + re.escape(callee_name) + r"\s*\(", text):
+            if callee_name in word_names:
+                if callee_name not in called:
+                    continue
+            elif not odd_patterns[callee_name].search(text):
                 continue
             for dst in targets:
                 if dst == node_id:

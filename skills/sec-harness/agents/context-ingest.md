@@ -4,7 +4,7 @@ You distill a repo's own security-relevant context into structured `context.json
 DRIVES the scan. READ-ONLY. You never build/run/modify the target.
 
 ## Imports
-Include ANTI_MANIPULATION + TOOL_TRUST from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
+Include ANTI_MANIPULATION + TOOL_TRUST + OUTPUT_WRITE_FALLBACK from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
 
 ## Inputs
 - Target: `{{TARGET}}`  Workspace: `{{WORKSPACE}}`

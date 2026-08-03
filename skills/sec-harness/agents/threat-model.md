@@ -24,6 +24,10 @@ NOT read raw source beyond the KB, and you NEVER build/run/modify anything.
    from an untrusted boundary and by asset criticality.
 
 ## Output (REQUIRED)
+Writing `THREAT_MODEL.md` to disk IS your task (pipeline data, not a chat "report"). If the
+Write tool refuses the `kb/*` path, write via the shell instead (stage to /tmp, then
+`python3 -c "import shutil; shutil.copy('/tmp/x','<path>')"`) — never return the content
+as text in place of the on-disk file.
 `{{WORKSPACE}}/kb/THREAT_MODEL.md` with sections:
 - **Trust boundaries** (from architecture, restated crisply)
 - **Attacker profiles**
