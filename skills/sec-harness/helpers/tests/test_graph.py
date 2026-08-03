@@ -202,3 +202,14 @@ def test_build_and_write_tier1_attaches_injected_facts(tmp_path):
     loaded = g.load_graph(ws)
     sources = {f.source for f in loaded.facts}
     assert "sca" in sources and "crypto-policy" in sources
+
+
+def test_symbol_at_returns_enclosing_symbol():
+    graph = g.build_tier1(FIXTURE, sha="x")
+    # handler is defined at app/api.py:4; a line at/after 4 resolves to it
+    assert g.symbol_at(graph, "app/api.py", 6) == "handler"
+    assert g.symbol_at(graph, "app/api.py", 4) == "handler"
+    # a line before any definition in the file resolves to nothing
+    assert g.symbol_at(graph, "app/api.py", 1) is None
+    # unknown file resolves to nothing
+    assert g.symbol_at(graph, "nope.py", 10) is None
