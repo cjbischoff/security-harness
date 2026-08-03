@@ -31,6 +31,8 @@ severity (`blocker` / `correctness` / `data-quality` / `efficiency` /
 | 022 | Red team (min-risk bar) | ai-platform | data-quality (minor) | needs-deployment-testing findings have risk_score=None; redteam `_above_bar` has a severity+tool-receipt fallback (good — 4/5 surfaced) but a low-severity None finding flagged "prime manual test" (PROMPT-INJECTION-0002) drops to gaps; mostly working-as-intended | BATCHED (low) |
 | 023 | Red team adversary (gate schema) | ai-platform | data-quality (wiring) | redteam-adversary.md verdict vocab (CONFIRMED/WEAKENED/INVALIDATED) vs KEEP/RECLASSIFY/STRIP framing mismatch; `build_gate_record`/`write_gate_record` are phase-claim-shaped (expect GateDecision lists), impedance-mismatched for redteam; kb/gates/redteam.json schema unpinned | BATCHED |
 | 024 | Recon (attack-class catalog) | accounting-integrations | data-quality (coverage) | no attack-class key for custom sandboxed-expression-evaluator / rules-engine formula RCE (lib/jsep-evaluator.js `callee.apply`); recon must freehand a note — not eval() nor ssti | BATCHED (catalog addition) |
+| 025 | Recon (authz detection) | accounting-integrations | data-quality (precision) | recon greps handler files for apiToken/isInvalidToken; misses the createBaseHandler factory indirection → 5 false authz-gap leads. Should trace one level of wrapper indirection or flag 'indirect dispatch, not verified' |
+| 026 | crypto_policy | accounting-integrations | data-quality (gate too narrow) | `_DENIED_ALGOS` bans only ecb; AES-CBC-without-AEAD and single-round-hash-as-KDF pass as {ok:true}, so real crypto weaknesses clear the mechanical gate |
 
 ## Run 1 — ai-platform: pipeline result (shakedown complete)
 
@@ -227,3 +229,46 @@ Run 2 (accounting-integrations) + Run 3 (ai-scheduler, scoped).
   `repair_prompt`) should catch this in a hardened flow.
 
 <!-- entries appended below -->
+
+## Run 2 — accounting-integrations (lighter depth): result
+
+Full pipeline through report (all deterministic stages + recon+adversary, 3 themed
+investigate agents, validate). **The three inline fixes held at 3× scale:**
+graph build 2.2s (fix 001); prefilter clean, all 4 backends (no coverage hole);
+clsmap now surfaces `resource` candidates + the broader rescue recovered 11
+mis-demoted CodeQL findings (fix 011, and confirmed the class is broader — see 011);
+no Write-block data loss with OUTPUT_WRITE_FALLBACK (fix 009).
+
+**Audit output** (`.sec-harness/accounting-integrations-e8979eb5/`):
+- **5 confirmed** — **JSEP-0001 (HIGH, RCE)** custom jsep-evaluator sandbox escape
+  (`constructor.constructor` two-step) from an account-scoped `PUT /workflows/{id}`
+  → arbitrary Node exec in the Lambda; **AUTHZ-0003 (HIGH)** unauthenticated presigned
+  S3 PUT/GET minting; **AUTHZ-0004 (HIGH)** unauthenticated financial-webhook ingest;
+  **AUTHZ-0002 (MED)** unauthenticated S3 read; **C-0051 (MED)** unauth prototype-swap
+  primitive.
+- **2 needs-deployment-testing** — **SECRETS-0001 (HIGH)** hardcoded PartsLedger OAuth
+  client_secret for real "PSI Prod" tenants committed to git; **CRYPTO-0001** AES-256-CBC
+  without AEAD + unsalted SHA-256 key.
+- **56 rejected** with cited controls (cmdi ×3, path-traversal ×21, security-other ×25,
+  etc. — all dev-CLI/scripts/e2e/internal-tooling; strong precision on big SAST buckets).
+- **Deferred (logged, not dropped):** 6 `xss` candidates (recon excluded xss — no
+  template engine; these are CodeQL hits in non-prod/tooling) + 1 `deps` (SCA) — untriaged
+  this pass under lighter-depth scope.
+- SARIF (5 results) + report.md produced. Redteam agentic phase skipped (lighter depth);
+  needs-deployment-testing findings carry runtime_dependent for a follow-up plan.
+
+**Signal read:** the harness found a **critical RCE and a committed prod secret that
+SAST did not flag** (recon structural note + investigate tracing + shape-hunting), while
+rejecting 56 candidates — including the entire 21-strong path-traversal and 25-strong
+security-other buckets — as non-production-reachable. This is the exploitability-over-
+pattern-matching thesis working on a real codebase.
+
+New issues this run: **024** (no attack-class for expression-evaluator RCE),
+**025** (recon authz grep misses factory indirection), **026** (crypto_policy too narrow).
+
+## Run 3 — ai-scheduler (105M): NOT RUN
+
+Deferred to a fresh session: this shakedown ran the full pipeline on Run 1 and a
+lighter full pass on Run 2, consuming the working context. Run 3 (105M, Py+TS) needs
+recon-driven subsystem scoping and its own multi-hour, ~2M-token budget. The three
+inline fixes are committed and validated at scale, so Run 3 starts clean.
