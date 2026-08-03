@@ -83,3 +83,11 @@ def test_context_and_postflight_prompts_exist():
     agents = Path(__file__).resolve().parents[2] / "agents"
     for p in ("context-ingest.md", "postflight.md"):
         assert (agents / p).exists() and (agents / p).read_text().strip(), p
+
+
+def test_fp_feedback_token_present_in_prompts():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]  # skills/sec-harness
+    for name in ("investigate", "critic"):
+        text = (root / "agents" / f"{name}.md").read_text()
+        assert "{{FP_FEEDBACK}}" in text, f"{name}.md missing FP_FEEDBACK token"

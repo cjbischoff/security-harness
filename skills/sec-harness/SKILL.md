@@ -217,6 +217,8 @@ Run AFTER the KB build. Prerequisites in the workspace: `kb/scan-profile.json`,
    sources `evidence.is_tool_receipt` recognizes; LLM assertions are `llm-claimed:*`.
    Gate −1 (sanity/hallucination) pre-gates findings before hard gates 0–3 evaluate exploitability,
    patch viability, and false-positive likelihood.
+   On pass N>1, fill `{{FP_FEEDBACK}}` with `fp_feedback.render_fp_feedback(ws)` output
+   (empty string on pass 1 or when there are no prior rejections).
 3. **Gate** (no LLM): validate all findings conform:
    `uv run python -m sec_harness.findings_gate --workspace <WS>` (exit 1 on any invalid finding).
 
@@ -240,6 +242,8 @@ to advance.
    substituted) rather than one-at-a-time. Rejects `raw` findings that are not
    triggerable in a release build (debug-only, dead code, disabled assertions).
    All agents import `references/prompt-constants.md` and wrap untrusted repo text.
+   On pass N>1, fill `{{FP_FEEDBACK}}` with `fp_feedback.render_fp_feedback(ws)` output
+   (empty string on pass 1 or when there are no prior rejections).
 3. **Adversarial validate** (model: opus — MUST be a DIFFERENT family than the
    sonnet investigator; parallelism does NOT relax this guard): dispatch validate
    subagents **in one message**, one per surviving `raw` finding, with
