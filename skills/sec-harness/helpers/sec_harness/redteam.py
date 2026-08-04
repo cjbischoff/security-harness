@@ -135,7 +135,13 @@ def render_plan(disc: dict, min_risk: int = DEFAULT_MIN_RISK) -> str:
                    f"{f.risk_score if f.risk_score is not None else '-'} | {f.file}:{f.line} |")
     out += ["", "## Manual test directives", ""]
     if plan:
-        out += [_directive_block(f) for f in plan]
+        settled = [f for f in plan if f.dataflow and f.preconditions]
+        incomplete = [f for f in plan if not (f.dataflow and f.preconditions)]
+        for heading, group in (("Code-settled, runtime-impact-pending", settled),
+                               ("Verification-incomplete", incomplete)):
+            out.append(f"### {heading}")
+            out.append("")
+            out += [_directive_block(f) for f in group] if group else ["_none_", ""]
     else:
         out += ["_No confirmed finding requires runtime validation at or above the bar._", ""]
     out += ["## Runtime-validation gaps", "",

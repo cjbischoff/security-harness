@@ -143,6 +143,21 @@ def test_report_sections_needs_deployment(tmp_path):
     assert "Needs deployment testing" in ws.report_path.read_text()
 
 
+def test_needs_deployment_split_by_dataflow_presence(tmp_path):
+    from sec_harness.models import Finding, FindingStatus, Severity
+    from sec_harness.report import to_markdown
+    settled = Finding(id="A", rule_id="r", cls="sqli",
+                      status=FindingStatus.NEEDS_DEPLOYMENT_TESTING, severity=Severity.HIGH,
+                      file="a.py", line=1, message="m", dataflow=["src", "sink"],
+                      preconditions=["auth"])
+    incomplete = Finding(id="B", rule_id="r", cls="sqli",
+                         status=FindingStatus.NEEDS_DEPLOYMENT_TESTING, severity=Severity.HIGH,
+                         file="b.py", line=1, message="m", verification="verify-error")
+    md = to_markdown([], needs_deployment=[settled, incomplete])
+    assert "code-settled, runtime-impact-pending" in md.lower()
+    assert md.lower().index("code-settled") < md.index("A") < md.index("B")
+
+
 def test_report_links_redteam_plan_and_shows_receipts(tmp_path):
     ws = Workspace(tmp_path / "ws"); ws.ensure()
     (ws.reports).mkdir(parents=True, exist_ok=True)

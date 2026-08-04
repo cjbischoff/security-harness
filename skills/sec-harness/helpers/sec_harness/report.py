@@ -140,12 +140,18 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
         lines += ["", "## Needs deployment testing (unconfirmable from source)", "",
                   ("_Real leads whose confirmation requires infra/config/secrets not in "
                    "the repo. Verify in a deployed environment; not counted as confirmed._"),
-                  "",
-                  "| ID | Class | Severity | Location | Why unconfirmable |",
-                  "|----|-------|----------|----------|-------------------|"]
-        for f in sorted(needs_deployment, key=lambda f: f.id):
-            lines.append(f"| {f.id} | {f.cls} | {f.severity.value} | "
-                         f"{f.file}:{f.line} | {f.message} |")
+                  ""]
+        settled = [f for f in needs_deployment if f.dataflow and f.preconditions]
+        incomplete = [f for f in needs_deployment if not (f.dataflow and f.preconditions)]
+        for heading, group in (("Code-settled, runtime-impact-pending", settled),
+                               ("Verification-incomplete", incomplete)):
+            lines += [f"### {heading}", "",
+                      "| ID | Class | Severity | Location | Why unconfirmable |",
+                      "|----|-------|----------|----------|-------------------|"]
+            for f in sorted(group, key=lambda f: f.id):
+                lines.append(f"| {f.id} | {f.cls} | {f.severity.value} | "
+                             f"{f.file}:{f.line} | {f.message} |")
+            lines.append("")
     if coverage:
         lines += ["", "## Coverage & limitations", "",
                   ("_SAST coverage by language. `none` = no mechanical dataflow OR pattern "
