@@ -19,6 +19,6 @@ denied:
   - rijndael-ctr-nomac
 floors:
   - rsa>=3072
-  - pbkdf2>=100000
+  - pbkdf2>=600000  # OWASP Password Storage Cheat Sheet, PBKDF2-HMAC-SHA256 (checked 2026-08-04)
   - ecc>=256
   - aes>=128
