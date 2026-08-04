@@ -70,6 +70,27 @@ def dedupe_findings(ws: Workspace) -> int:
             f.history.append({"event": f"duplicate_of:{primary.id}"})
             marked += 1
 
+    # Cross-class pass: the same underlying fact (identical file/line/dataflow)
+    # can surface under different attack-class framings (e.g. ssrf vs authz).
+    # Only merge when dataflow is non-empty, so dataflow-less findings never
+    # collide across classes on file/line alone.
+    fact_groups: dict[tuple[str, int, tuple[str, ...]], list[Finding]] = {}
+    for f in findings:
+        if f.status in _ACTIVE and f.dataflow:
+            fact_groups.setdefault((f.file, f.line, tuple(f.dataflow)), []).append(f)
+
+    for members in fact_groups.values():
+        if len(members) < 2:
+            continue
+        primary = min(members, key=lambda f: (-_SEVERITY_ORDER[f.severity.value], f.id))
+        for f in members:
+            if f.id == primary.id:
+                continue
+            f.status = FindingStatus.DUPLICATE
+            f.duplicate_of = primary.id
+            f.history.append({"event": f"duplicate_of:{primary.id}"})
+            marked += 1
+
     if marked or stamped:
         write_findings(ws, findings)
     return marked
