@@ -15,6 +15,10 @@ _DENIED_ALGOS = {"md5", "sha1", "des", "3des", "rc4", "ecb", "mcrypt", "rijndael
 _FLOORS = {"rsa": 3072, "pbkdf2": 100000, "ecc": 256, "aes": 128}
 _APPROVED_KEY_SOURCES = {"kms", "vault", "chamber", "gcp-secret-manager", "azure-keyvault", "env"}
 _DENIED_KEY_SOURCES = {"literal", "hardcoded", "filesystem", "source"}
+_NON_AEAD_MODES = ("cbc", "cfb", "ofb")
+_AEAD_INDICATORS = ("gcm", "ccm", "poly1305", "hmac")
+_BARE_FAST_HASHES = ("sha256", "sha512", "md5", "sha1")
+_KDF_INDICATORS = ("pbkdf2", "bcrypt", "scrypt", "argon2")
 
 
 def _norm(s: str) -> str:
@@ -42,6 +46,12 @@ def check(algo: str, params: dict | None = None, key_source: str = "") -> dict:
             size = params.get(fam)
             if size is not None and int(size) < floor:
                 violations.append(f"{fam} size {size} below floor {floor}")
+    if any(m in a for m in _NON_AEAD_MODES) and not any(i in a for i in _AEAD_INDICATORS):
+        violations.append(f"non-AEAD block cipher mode without MAC: {algo}")
+    if params.get("kdf_context") and any(h in a for h in _BARE_FAST_HASHES) and not any(
+        k in a for k in _KDF_INDICATORS
+    ):
+        violations.append(f"bare fast hash used as KDF: {algo}")
     if key_source:
         ks = _norm(key_source)
         if ks in _DENIED_KEY_SOURCES:
