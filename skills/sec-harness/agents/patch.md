@@ -23,7 +23,9 @@ host may compress/rewrite shell output, and a diff whose context bytes don't mat
 the file will be rejected by `git apply`. Diff gotchas that cause a "corrupt patch"
 rejection: every context line needs a leading space — including **blank** context
 lines (a bare empty line is invalid; emit a single space); preserve tabs literally;
-hunk `@@ -a,b +c,d @@` counts must match the lines emitted.
+hunk `@@ -a,b +c,d @@` counts must match the lines emitted. Before finalizing a diff,
+mentally run `git apply --check` semantics: count the actual added/removed lines and
+confirm they match `a,b`/`c,d` in the hunk header — a miscount produces a corrupt patch.
 
 ## Procedure
 For each `confirmed` finding:
@@ -46,7 +48,10 @@ For each `confirmed` finding:
    repo root (e.g. `a/app.py`), with enough surrounding context lines to apply cleanly.
 5. Write the diff string into the finding's `patch_diff` field (update the JSON file
    in place). Leave `status` as `confirmed` (the verifier promotes to `fixed`). Do NOT
-   set `verification` — that is the verifier's job.
+   set `verification` — that is the verifier's job. For multi-line diffs containing
+   tabs or template literals, write `patch_diff` via the python-json injector
+   (OUTPUT_WRITE_FALLBACK), never the Write tool — the Write tool mangles whitespace
+   in exactly this shape of content.
 
 ## Output
 Update each confirmed finding's JSON with a `patch_diff`. Return a summary: how many
