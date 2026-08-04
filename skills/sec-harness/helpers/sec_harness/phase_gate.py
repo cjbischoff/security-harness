@@ -150,6 +150,10 @@ def claims_from_profile(profile) -> list[dict]:
         claims.append({"id": f"sub-{i}:{name}",
                        "text": f"subsystem {name}: {s.get('why', '')}",
                        "refs": list(s.get("paths", []))})
+    evidence = getattr(profile, "attack_surface_evidence", {}) or {}
+    for k in getattr(profile, "attack_surface", []) or []:
+        claims.append({"id": f"surf-{k}", "text": f"attack_surface includes {k}",
+                       "refs": list(evidence.get(k, []))})
     return claims
 
 

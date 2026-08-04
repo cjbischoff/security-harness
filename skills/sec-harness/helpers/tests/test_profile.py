@@ -24,6 +24,7 @@ def _valid_dict():
         "budget_hint": {"max_candidates": 200, "max_investigate_agents": 6},
         "notes": {},
         "subsystems": [],
+        "attack_surface_evidence": {},
     }
 
 

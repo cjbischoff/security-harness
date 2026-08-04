@@ -77,6 +77,18 @@ def test_claims_from_profile_extracts_entrypoints_and_subsystems():
     assert sub["refs"] == ["src/auth.py"]
 
 
+def test_claims_from_profile_extracts_attack_surface_claims():
+    from types import SimpleNamespace
+
+    from sec_harness.phase_gate import claims_from_profile
+    p = SimpleNamespace(entrypoints=[], subsystems=[], attack_surface=["sqli"],
+                        agents_to_spawn=["sqli"],
+                        attack_surface_evidence={"sqli": ["src/db.py:10"]})
+    claims = claims_from_profile(p)
+    surf = next(c for c in claims if c["id"] == "surf-sqli")
+    assert surf["refs"] == ["src/db.py:10"] and "sqli" in surf["text"]
+
+
 def test_claims_from_context_extracts_items_with_locations():
     from sec_harness.context import Context, ContextItem
     from sec_harness.phase_gate import claims_from_context

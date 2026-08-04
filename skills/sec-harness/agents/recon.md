@@ -47,6 +47,10 @@ as you spot them.
 5. **Attack surface:** for each attack-class key in the catalog, include it in
    `attack_surface` ONLY if at least one indicator is present in the code, or a
    detected framework strongly implies it. Omit classes with no evidence.
+   **Evidence:** for every key you add to `attack_surface`, record the `file:line`
+   indicator(s) that justified it in `attack_surface_evidence` (`{class_key: [file:line,
+   ...]}`). A framework-implied class with no direct indicator gets an empty list — the
+   phase gate routes those to adversary judgment instead of auto-rejecting them.
    **Companion hunting docs (F2):** also select relevant `references/hunting/*.md`
    companions per the "Domain-specific classes" table in `attack-classes.md`
    (JWT/OAuth/SAML→web-protocol-auth; browser/DOM/React→client-side;
