@@ -7,6 +7,17 @@ the class-specific bits; the gate ladder + tool-receipt rules come from the base
 Config/IaC fixes are verified by a `tfsec`/`checkov` before/after diff where available:
 the flagged rule fires before and is gone after.
 
+## Class boundary
+**IS:** an insecure default or exposed setting in configuration/IaC (open ACL, debug
+mode on, permissive CORS, exposed port/service) — the weakness lives in the
+configuration, not in application code logic.
+**IS NOT:**
+- A literal credential/API key/token value committed in config or code → `cls: secrets`.
+  Config is about a setting being too permissive; secrets is about a value that
+  shouldn't be there at all.
+- Weak crypto parameters set via config (e.g. a config-driven KDF round count) → `cls:
+  crypto`, since the mechanical policy gate lives there.
+
 ## Proof tuple (required evidence)
 
 A confirmable config finding needs all three, each with a `file:line`:

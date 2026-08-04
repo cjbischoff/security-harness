@@ -13,6 +13,19 @@ A shared service credential that runs every query scoped to the authenticated us
 is normal, safe architecture — not a confused deputy. Both halves (no per-resource check
 AND an action the user couldn't perform directly) must hold.
 
+## Class boundary
+**IS:** an agent tool call that performs a real side effect under a broad/shared
+credential without re-checking the REQUESTING USER's authorization for that specific
+resource — the confused-deputy shape, specific to agent/tool architectures.
+**IS NOT:**
+- Untrusted text steering WHICH tool runs or what arguments it gets, with the tool's own
+  authz otherwise correct → `cls: prompt-injection`. Excessive-agency is the missing
+  per-call authz re-check; prompt-injection is the untrusted-input vector that reaches
+  the tool call. The same trace often chains both — if it does, prefer `cls:
+  logic-chain` per the base prompt's exception, not one class picking up the other's bug.
+- A plain user-facing endpoint (no agent/tool layer) missing an ownership check → `cls:
+  authz`.
+
 ## Proof tuple (required evidence)
 
 A confirmable excessive-agency gap needs all three, each with a `file:line`:

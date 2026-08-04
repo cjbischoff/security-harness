@@ -11,6 +11,19 @@ Enforce object- and function-level checks on EVERY path.
 Two user contexts: the owner succeeds, a non-owner gets 403/empty. Grep the diff for any
 fallback branch that reintroduces the client id.
 
+## Class boundary
+**IS:** an authenticated principal reaching another principal's resource, or a
+lower-privileged role reaching an action it shouldn't, because the object- or
+function-level check is missing or wrong (BOLA/BFLA).
+**IS NOT:**
+- Whether the caller IS who they claim to be at all → `cls: authn`. Authz assumes
+  identity is already established; it governs what an established identity may touch.
+- A multi-step workflow invariant (quantity, ordering, state transitions) being violated
+  by a legitimate-looking sequence, with no ownership/role check involved → `cls:
+  business-logic`.
+- A shared AI-agent service credential missing a per-resource re-check on the requesting
+  user → `cls: excessive-agency` (same shape, agent-tool context).
+
 ## Proof tuple (required evidence)
 
 A confirmable authz gap needs all three, each with a `file:line`:

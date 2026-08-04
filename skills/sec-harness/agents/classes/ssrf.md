@@ -13,6 +13,19 @@ An outbound request to a fixed, hardcoded destination is not SSRF regardless of 
 request body is built. The DESTINATION — host/port/scheme — must be attacker-influenced,
 not just the request payload.
 
+## Class boundary
+**IS:** the server itself makes an attacker-steerable network request (HTTP client,
+socket, DNS lookup, or a subprocess shell-out to `curl`/`wget` with an attacker-controlled
+URL argument).
+**IS NOT:**
+- A client-side redirect (`Location` header, `next=` param) with no server-side fetch of
+  that URL → `cls: open-redirect`, not ssrf.
+- A `subprocess`/shell-out call where the ATTACKER controls shell metacharacters or the
+  binary invoked, not just a URL argument to a fixed binary → `cls: cmdi`.
+- A request to an attacker-influenced PATH on an otherwise-fixed, allowlisted host → not a
+  finding at all unless the path traversal escapes the intended API surface (then trace it
+  as `cls: path-traversal` if it reaches a file sink, or note it as informational).
+
 ## Proof tuple (required evidence)
 
 A confirmable SSRF needs all three, each with a `file:line`:

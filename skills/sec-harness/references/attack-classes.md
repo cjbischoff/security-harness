@@ -68,3 +68,25 @@ Selection guidance: choose a companion when its frameworks/indicators appear (JW
 SAML libs → web-protocol-auth; browser/DOM/React → client-side; LangChain/LangGraph/MCP →
 ai-agent; always consider business-logic; memory-native only for C/C++/unsafe). Companion
 classes flow through `agents_to_spawn` + `clsmap` exactly like universal ones.
+
+## Class disambiguation (cross-class boundary discipline)
+
+Classes above with a thin extension in `agents/classes/*.md` carry a full "Class boundary"
+section (IS / IS NOT / route-to). For the remaining canonical keys that have no extension
+file yet, use this table to route a confused shape to the right `cls` instead of
+force-fitting it into whichever agent happened to find it:
+
+| Confusable pair | Discriminator |
+|-----------------|---------------|
+| `ssti` vs `xss` | Does the payload execute as TEMPLATE syntax server-side (`{{ }}`/`<%= %>` evaluated by the template engine) → `ssti`. Does it render unescaped into HTML/DOM with no server-side template evaluation → `xss`. |
+| `ssti` vs `deserialization`/`cmdi` | SSTI's sink is a template engine's own render call, not `eval()`/`pickle.loads()`/`exec()` — those are `deserialization`/`cmdi` even if the exploit chain ultimately achieves code execution through a template engine's escape hatch. |
+| `xxe` vs `deserialization` | XXE is specifically an XML parser expanding external entities (DTD/`SYSTEM`); a non-XML deserializer (pickle, YAML, Java `readObject`) is `deserialization` even though both can reach file-read/RCE. |
+| `path-traversal` vs `resource` | Impact is arbitrary file read/write outside the intended root → `path-traversal`. Impact is exhaustion from unbounded size/count with no traversal → `resource`. |
+| `open-redirect` vs `ssrf` | The tainted URL is only ever handed to the BROWSER (a `Location`/redirect response) with no server-side fetch → `open-redirect`. The SERVER itself dereferences the URL → `ssrf`. |
+| `webhook-verification` vs `crypto` | Missing/broken signature check on a specific inbound webhook route → `webhook-verification`. A weak algorithm/key source used more generally (not gating a webhook) → `crypto`. |
+| `expr-eval-rce` vs `deserialization`/`ssti` | The sink is a custom expression/rule-engine's own call/apply mechanism (`jsep`, `expr-eval`, `mathjs`, a bespoke formula engine) — not a language-level deserializer or a template engine's render call. |
+| `dom-xss`/`dom-clobbering`/`prototype-pollution` vs `xss` | Client-side-only sinks (`innerHTML`, global object pollution via crafted property names) with no server-side render step → the specific client-side key, not generic `xss`. |
+
+If a candidate could plausibly be two of these, write it under the discriminated class and
+note the other in the finding's `message` — never split one concrete sink into two findings
+under both classes.

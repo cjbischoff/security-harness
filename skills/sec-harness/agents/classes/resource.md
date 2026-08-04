@@ -14,4 +14,13 @@ A confirmable resource finding needs all three, each with a `file:line`:
 2. **Missing bound/canonicalization** — no upper bound/limit on the value, or no path canonicalization/confinement before use.
 3. **Impact** — the concrete consequence (unbounded allocation, path traversal outside the intended root, resource exhaustion).
 
+## Class boundary
+**IS:** an attacker-controlled size/count/volume with no upper bound, causing resource
+exhaustion (unbounded memory/CPU/disk, unbounded pagination, decompression bombs).
+**IS NOT:**
+- A path built from attacker input that escapes the intended root and reaches a file
+  read/write, where the IMPACT is arbitrary file access rather than exhaustion → `cls:
+  path-traversal`. Use `resource` when the harm is volume/exhaustion; use
+  `path-traversal` when the harm is reading/writing outside the intended directory.
+
 **Instance preservation:** do NOT collapse sibling instances that share a CWE but hit distinct concrete sinks/routes into one finding. Expand every concrete instance as its own candidate; dedupe merges only exact `(file,line,cls)` collisions.
