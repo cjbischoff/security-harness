@@ -18,6 +18,7 @@ import json
 
 from sec_harness.evidence import is_tool_receipt
 from sec_harness.models import Finding, FindingStatus, Severity
+from sec_harness.phase_gate import GateDecision, build_gate_record, write_gate_record
 from sec_harness.workspace import Workspace, load_paths, read_findings
 
 DEFAULT_MIN_RISK = 7
@@ -152,6 +153,28 @@ def render_plan(disc: dict, min_risk: int = DEFAULT_MIN_RISK) -> str:
     return "\n".join(out) + "\n"
 
 
+def build_redteam_gate_record(findings: list[Finding], verdicts: dict[str, str] | None = None) -> dict:
+    """Assemble the redteam phase gate record from needs-runtime findings.
+
+    Each finding is already tool-receipt gated upstream (critic/judge/validate), so this skips
+    :func:`phase_gate.ref_resolves` and sends every finding straight to the adversary.
+
+    Args:
+        findings: Needs-runtime findings entering the manual test plan.
+        verdicts: Optional ``finding.id`` → adversary verdict
+            (``CONFIRMED`` / ``WEAKENED`` / ``INVALIDATED``).
+
+    Returns:
+        A gate record in the same shape :func:`phase_gate.build_gate_record` produces.
+    """
+    decisions = [
+        GateDecision(claim_id=f.id, status="to-adversary", refs=[f"{f.file}:{f.line}"],
+                     text=f.message)
+        for f in findings
+    ]
+    return build_gate_record("redteam", decisions, verdicts)
+
+
 def write_plan(ws: Workspace, min_risk: int = DEFAULT_MIN_RISK) -> dict:
     """Discriminate the workspace's findings and write ``redteam-plan.md``.
 
@@ -166,6 +189,7 @@ def write_plan(ws: Workspace, min_risk: int = DEFAULT_MIN_RISK) -> dict:
     ws.reports.mkdir(parents=True, exist_ok=True)
     path = ws.reports / "redteam-plan.md"
     path.write_text(render_plan(disc, min_risk))
+    write_gate_record(ws, "redteam", build_redteam_gate_record(disc["needs_runtime"]))
     return {
         "plan": str(path),
         "needs_runtime": len(disc["needs_runtime"]),
