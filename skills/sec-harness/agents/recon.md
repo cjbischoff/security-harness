@@ -38,6 +38,9 @@ as you spot them.
    (e.g. a controller with 15 `*Action` methods) record 1–3 representative
    security-relevant ones, not every method. Keep the list under ~40 rows on a
    large repo — it orients later phases, it is not an exhaustive route table.
+   Cite a symbol only if you have seen it in the file; if unsure, cite the file and a textual
+   hint, never a guessed function name. A phantom symbol sends investigate to a line that does
+   not exist.
 4. **Runnable:** set `true` only if the repo DECLARES a build/run/test path
    (Dockerfile, `make`, test config, `scripts` in package.json). This is
    informational only — you still never execute anything.
