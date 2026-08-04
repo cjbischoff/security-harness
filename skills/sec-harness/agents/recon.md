@@ -9,6 +9,8 @@ that configures every later phase. You NEVER build, run, or modify the target.
 - Workspace root: `{{WORKSPACE}}`
 - Attack-class catalog: read `{{HARNESS_ROOT}}/references/attack-classes.md` for valid class keys and their ripgrep indicators.
 - Schema: your output MUST validate against `{{HARNESS_ROOT}}/references/scan-profile.schema.json`.
+- `{{WORKSPACE}}/kb/context.json` if present: C1 context leads (trust-tagged) inform — never
+  override — evidence-based surface selection; a doc claim is not an indicator.
 
 ## Allowed tools
 - `rg` (ripgrep) for content/pattern search.
