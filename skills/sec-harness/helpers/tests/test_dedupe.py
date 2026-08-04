@@ -38,6 +38,20 @@ def test_dedupe_leaves_distinct_findings(tmp_path):
     assert dedupe_findings(ws) == 0
 
 
+def test_dedupe_preserves_distinct_findings_at_same_site(tmp_path):
+    ws = Workspace(tmp_path / "workspace"); ws.ensure()
+    a = Finding(id="F-1", rule_id="r", cls="ssrf", status=FindingStatus.RAW,
+                severity=Severity.HIGH, file="app.py", line=18, message="m",
+                dataflow=["req.body.url", "isPrivateIp", "fetch"])
+    b = Finding(id="F-2", rule_id="r", cls="ssrf", status=FindingStatus.RAW,
+                severity=Severity.HIGH, file="app.py", line=18, message="m",
+                dataflow=["req.query.target", "isPrivateIp", "axios.get"])
+    write_findings(ws, [a, b])
+    assert dedupe_findings(ws) == 0
+    statuses = {f.id: f.status for f in read_findings(ws)}
+    assert statuses["F-1"] is FindingStatus.RAW and statuses["F-2"] is FindingStatus.RAW
+
+
 def test_dedupe_ignores_non_active_statuses(tmp_path):
     ws = Workspace(tmp_path / "workspace"); ws.ensure()
     write_findings(ws, [

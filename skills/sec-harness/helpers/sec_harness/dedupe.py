@@ -52,10 +52,11 @@ def dedupe_findings(ws: Workspace) -> int:
             f.fingerprint = fingerprint(f, anchor=anchor)
     stamped = True
 
-    groups: dict[tuple[str, int, str], list[Finding]] = {}
+    groups: dict[tuple[str, int, str, tuple[str, ...] | str], list[Finding]] = {}
     for f in findings:
         if f.status in _ACTIVE:
-            groups.setdefault((f.file, f.line, f.cls), []).append(f)
+            key = (f.file, f.line, f.cls, tuple(f.dataflow) or f.message)
+            groups.setdefault(key, []).append(f)
 
     for members in groups.values():
         if len(members) < 2:
