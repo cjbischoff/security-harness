@@ -27,12 +27,20 @@ def partition_candidates_by_class(ws: Workspace) -> dict[str, list[Finding]]:
 def unrouted_candidate_classes(ws: Workspace, agents_to_spawn: list[str]) -> dict[str, int]:
     """Candidate classes that no investigate agent will own, with their counts.
 
-    A candidate whose ``cls`` is not in ``agents_to_spawn`` (and is not ``deps``,
-    which SCA handles) gets no investigate agent under the one-agent-per-spawned-
-    class dispatch — it is silently dropped from triage. The classifier routinely
-    produces such classes (``security-other``/``unknown`` for vendored rules with
-    no ``cls``/CWE), and they can hold high-value hits. The orchestrator should
-    surface this and spawn a general-triage agent for the leftovers.
+    A candidate whose ``cls`` is not in ``agents_to_spawn`` gets no investigate agent under the
+    one-agent-per-spawned-class dispatch — it is silently dropped from triage. The classifier
+    routinely produces such classes (``security-other``/``unknown`` for vendored rules with no
+    ``cls``/CWE), and they can hold high-value hits. The orchestrator should surface this and
+    spawn a general-triage agent for the leftovers.
+
+    ``deps`` (SCA) candidates are NOT exempted by class name alone: SCA findings are handled by
+    a different mechanism than the attack-class investigate agents, but that mechanism must
+    actually run before a ``deps`` candidate counts as routed. This function has no way to know
+    whether that happened other than the finding's own status — so a ``deps`` candidate still
+    sitting at ``status=="candidate"`` is reported here exactly like any other unrouted class.
+    A previous version hardcoded ``deps`` as always-routed, which let a critical-severity OSV
+    finding sail through Investigate → Dedupe → Critic → Judge → Validate → Trace → Calibrate
+    untouched, undetected by the one check meant to catch exactly this.
 
     Args:
         ws: Workspace to read candidates from.
@@ -41,7 +49,7 @@ def unrouted_candidate_classes(ws: Workspace, agents_to_spawn: list[str]) -> dic
     Returns:
         ``{cls: candidate_count}`` for each unrouted class (empty if all routed).
     """
-    routed = set(agents_to_spawn) | {"deps"}
+    routed = set(agents_to_spawn)
     out: dict[str, int] = {}
     for cls, fs in partition_candidates_by_class(ws).items():
         if cls in routed:

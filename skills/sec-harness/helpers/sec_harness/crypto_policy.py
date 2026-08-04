@@ -11,8 +11,9 @@ import re
 from pathlib import Path
 
 _DENIED_ALGOS = {"md5", "sha1", "des", "3des", "rc4", "ecb", "mcrypt", "rijndael-ctr-nomac"}
-# param floors
-_FLOORS = {"rsa": 3072, "pbkdf2": 100000, "ecc": 256, "aes": 128}
+# param floors — pbkdf2 per OWASP Password Storage Cheat Sheet (PBKDF2-HMAC-SHA256: 600,000
+# iterations, checked 2026-08-04; supersedes the older ~100,000-iteration guidance)
+_FLOORS = {"rsa": 3072, "pbkdf2": 600000, "ecc": 256, "aes": 128}
 _APPROVED_KEY_SOURCES = {"kms", "vault", "chamber", "gcp-secret-manager", "azure-keyvault", "env"}
 _DENIED_KEY_SOURCES = {"literal", "hardcoded", "filesystem", "source"}
 _NON_AEAD_MODES = ("cbc", "cfb", "ofb")
