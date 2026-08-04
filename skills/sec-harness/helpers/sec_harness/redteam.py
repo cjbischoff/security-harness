@@ -48,6 +48,8 @@ def _above_bar(f: Finding, min_risk: int) -> bool:
     has_receipt = any(is_tool_receipt(s) for s in f.evidence_sources)
     if f.severity in _ACTIONABLE_SEVERITIES and has_receipt:
         return True
+    if any(h.get("event") == "redteam:prime-manual-test" for h in f.history):
+        return True
     return (f.risk_score or 0) >= min_risk
 
 

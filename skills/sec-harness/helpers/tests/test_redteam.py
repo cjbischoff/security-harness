@@ -2,7 +2,13 @@
 
 from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.phase_gate import write_gate_record
-from sec_harness.redteam import build_redteam_gate_record, discriminate, render_plan, write_plan
+from sec_harness.redteam import (
+    _above_bar,
+    build_redteam_gate_record,
+    discriminate,
+    render_plan,
+    write_plan,
+)
 from sec_harness.workspace import Workspace, write_findings
 
 
@@ -14,6 +20,12 @@ def _f(fid, status=FindingStatus.CONFIRMED, risk=8, disposition=None, runtime_te
         runtime_disposition=disposition, runtime_test=runtime_test,
         evidence_sources=["semgrep:rule"],
     )
+
+
+def test_above_bar_clears_prime_manual_test_regardless_of_risk():
+    f = _f("P", risk=None, severity=Severity.LOW)
+    f.history = [{"event": "redteam:prime-manual-test"}]
+    assert _above_bar(f, min_risk=7) is True
 
 
 def test_discriminate_partitions():
