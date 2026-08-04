@@ -14,6 +14,19 @@ beyond what they already have, is not a finding. The violated invariant must pro
 concrete, attacker-favorable outcome (double-spend, privilege gain, price/quantity
 manipulation).
 
+## Class boundary
+**IS:** a workflow/state-machine invariant broken by skipping, reordering, or repeating
+steps a legitimate user is otherwise allowed to take.
+**IS NOT:**
+- Reaching another user's resource or a higher-privileged action because an
+  object-/function-level check is missing → `cls: authz`. Business-logic assumes the
+  attacker is acting within their own account/role; the bug is in the sequence, not the
+  permission check.
+- A raw SQLi/XSS/path-traversal/deserialization sink reachable from input, even if it
+  happens to sit inside a business workflow → file it under the concrete technical
+  `cls`, not `business-logic`. Reserve this class for sequence/invariant violations a
+  scanner-shaped class can't express.
+
 ## Proof tuple (required evidence)
 
 A confirmable business-logic gap needs all three, each with a `file:line`:

@@ -13,6 +13,16 @@ Documents tagged with a tenant field but never filtered on is the bug; a tenant 
 that IS applied in the query's `WHERE`/filter clause is not — cite the query, not the
 schema.
 
+## Class boundary
+**IS:** an AI-system-specific shared-state mechanism (conversation history, embedding
+store, KV/prompt cache) that mixes data across principals because the cache/query key
+isn't scoped per user or tenant.
+**IS NOT:**
+- A conventional multi-tenant DB query missing a `tenant_id`/`WHERE` scope with no
+  AI/embedding/cache component involved → `cls: authz` (plain BOLA), not context-bleed.
+  Use context-bleed specifically when the shared surface is a model-serving artifact
+  (prompt cache, vector index, agent memory).
+
 ## Proof tuple (required evidence)
 
 A confirmable context-bleed needs all three, each with a `file:line`:

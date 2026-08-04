@@ -13,6 +13,17 @@ A check that validates that a token is PRESENT but not that it is valid/unexpire
 correctly signed is a bypass, not a functioning control — cite the missing validation
 step, not just the check's existence.
 
+## Class boundary
+**IS:** a way to reach protected behavior as an unauthenticated party, or with a
+forged/expired/unverified identity credential (login bypass, session fixation, JWT
+signature not checked).
+**IS NOT:**
+- An authenticated user reaching another user's data or a role's action → `cls: authz`.
+  Authn is only about establishing who the caller is, not what they can then do.
+- The password hash or signing algorithm being weak (md5/sha1, no salt, low PBKDF2
+  rounds) with the verification FLOW itself otherwise correct → `cls: crypto`. Authn is
+  the flow; crypto is the primitive.
+
 ## Proof tuple (required evidence)
 
 A confirmable authn flaw needs all three, each with a `file:line`:

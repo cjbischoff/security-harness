@@ -17,6 +17,18 @@ denied key source (literal/hardcoded/filesystem) is a violation — cite it in t
 md5/sha1 used as a non-security checksum/cache-key/dedup id is NOT a finding (verify the
 use). A weak algo behind an approved outer layer may be defense-in-depth, not exploitable.
 
+## Class boundary
+**IS:** a weak primitive, insufficient parameter, or bad key source protecting a
+genuinely sensitive value (per the mechanical policy gate above).
+**IS NOT:**
+- The authentication FLOW being bypassable (missing check, forged token accepted) with
+  the underlying primitive itself sound → `cls: authn`. Crypto is the primitive; authn is
+  whether the flow actually calls it correctly.
+- A missing/incorrect HMAC signature check on a webhook payload → `cls:
+  webhook-verification` if that key is in scope for this repo; otherwise keep as crypto
+  but name the specific check missing (constant-time compare vs raw `==`) rather than a
+  generic "weak crypto" label.
+
 ## Proof tuple (required evidence)
 
 A confirmable crypto weakness needs all three, each with a `file:line`:
