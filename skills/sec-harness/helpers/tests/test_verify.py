@@ -83,6 +83,17 @@ def test_verify_findings_skips_findings_without_patch(tmp_path):
     assert n == 0  # no patch_diff -> not verified
 
 
+def test_codeql_finding_routes_to_codeql_rerun(monkeypatch):
+    import sec_harness.verify as V
+    calls = []
+    monkeypatch.setattr(V, "run_semgrep",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no semgrep")))
+    monkeypatch.setattr(V, "run_codeql", lambda target, **k: calls.append(target) or [])
+    V.verify_patch("/tgt", "diff", "cfg", "app.py", "sqli",
+                   evidence_sources=["codeql:py/sql-injection"])
+    assert calls
+
+
 def test_copy_ignore_skips_git_and_sockets(tmp_path):
     import os
 
