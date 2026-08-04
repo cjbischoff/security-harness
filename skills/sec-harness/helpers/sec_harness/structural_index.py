@@ -15,7 +15,12 @@ from pathlib import Path
 
 _PY_DEF = re.compile(r"^\s*(?:async\s+)?(?:def|class)\s+([A-Za-z_]\w*)")
 _JS_FN = re.compile(r"^\s*(?:export\s+)?function\s+([A-Za-z_$][\w$]*)")
-_JS_ASSIGN = re.compile(r"^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=")
+_JS_ASSIGN = re.compile(
+    r"^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*[^=]+)?\s*="
+)
+_JS_FIELD_ARROW = re.compile(
+    r"^\s*([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>"
+)
 _DEF_TOKENS = ("def ", "class ", "function ", "const ", "let ", "var ")
 _BRACE_EXTS = {".js", ".ts", ".jsx", ".tsx", ".go", ".java", ".c", ".cc", ".cpp", ".h", ".hpp"}
 
@@ -32,7 +37,7 @@ def list_definitions(path: str | Path) -> list[tuple[str, int]]:
     """
     out: list[tuple[str, int]] = []
     for i, raw in enumerate(Path(path).read_text().splitlines(), start=1):
-        for pat in (_PY_DEF, _JS_FN, _JS_ASSIGN):
+        for pat in (_PY_DEF, _JS_FN, _JS_ASSIGN, _JS_FIELD_ARROW):
             m = pat.match(raw)
             if m:
                 out.append((m.group(1), i))
