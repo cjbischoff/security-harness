@@ -270,7 +270,9 @@ to advance.
    valid terminal state (distinct from `confirmed` and `rejected`) for findings that
    fail validation infrastructure.
 4. **Calibrate** (no LLM): `uv run python -m sec_harness.calibrate --workspace <WS>` —
-   sets `risk_score` 1–10 on every `confirmed` finding.
+   promotes raw findings marked `runtime_dependent` to `needs-deployment-testing` (via
+   `promote_runtime_dependent`, `sec_harness.campaign`; ISSUE-027) before setting `risk_score`
+   1–10 on every `confirmed` finding.
 5. **Gate** (no LLM): `uv run python -m sec_harness.findings_gate --workspace <WS>`.
 
 `confirmed` findings with `risk_score` are the harness's output. Patch generation +
@@ -313,9 +315,9 @@ delivery, business-logic abuse). This phase hands a human exactly which of those
 running system, and how. **The harness never executes the target — it emits a plan a person
 runs manually.**
 
-0. **Promote runtime-dependent leads** (no LLM): run `promote_runtime_dependent(ws)` (from
-   `sec_harness.campaign`) so raw findings marked `runtime_dependent` become
-   `needs-deployment-testing` and enter the plan (O-021).
+0. Runtime-dependent leads are already promoted: Calibrate (Phase 4) ran
+   `promote_runtime_dependent(ws)` before scoring, so raw findings marked `runtime_dependent`
+   became `needs-deployment-testing` and are already eligible for the plan (O-021/ISSUE-027).
 1. **Red Team** (model: sonnet): spawn `agents/redteam.md`. It sets `runtime_disposition` on
    each confirmed finding — `static-settled` (source-provable) or `needs-runtime` (needs a live
    check) — and writes a `runtime_test` block (`objective`/`preconditions`/`payloads` with

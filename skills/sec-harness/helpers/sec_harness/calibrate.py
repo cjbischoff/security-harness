@@ -136,7 +136,9 @@ def calibrate_findings(ws: Workspace) -> int:
     Returns:
         The number of findings scored.
     """
+    from sec_harness.campaign import promote_runtime_dependent  # local: avoid cycle
     from sec_harness.citations import attach as _attach_citations  # local: avoid cycle
+    promote_runtime_dependent(ws)
     findings = read_findings(ws)
     scored = 0
     for f in findings:

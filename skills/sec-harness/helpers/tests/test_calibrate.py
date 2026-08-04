@@ -166,6 +166,19 @@ def test_cluster_a_acceptance_ordering(tmp_path):
     assert "AUTHZ-0001" == disc["needs_runtime"][0].id       # critical ranks first in the plan
 
 
+def test_calibrate_promotes_runtime_dependent_before_scoring(tmp_path):
+    from sec_harness.calibrate import calibrate_findings
+    from sec_harness.models import Finding, FindingStatus, Severity
+    from sec_harness.workspace import Workspace, read_findings, write_findings
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    write_findings(ws, [Finding(id="A", rule_id="r", cls="business-logic",
+                                status=FindingStatus.RAW, severity=Severity.LOW,
+                                file="a.py", line=1, message="m", runtime_dependent=True)])
+    calibrate_findings(ws)
+    by = {f.id: f.status for f in read_findings(ws)}
+    assert by["A"] is FindingStatus.NEEDS_DEPLOYMENT_TESTING
+
+
 def test_malformed_cvss_does_not_crash_batch(tmp_path):
     # O-029: one finding with an invalid metric must NOT zero the others; it falls back to heuristic.
     ws = Workspace(tmp_path / "ws"); ws.ensure()
