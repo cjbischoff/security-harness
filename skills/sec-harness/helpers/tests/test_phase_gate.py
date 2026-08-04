@@ -28,6 +28,37 @@ def test_ref_resolves(tmp_path):
     assert not ref_resolves(root, "")                        # empty
 
 
+def test_ref_resolves_line_range(tmp_path):
+    # Regression: "path:43-53" range citations must anchor on the start line rather than
+    # falling through to a path-existence check with the literal ":43-53" suffix glued on
+    # (harness "range-ref bug").
+    root = _repo(tmp_path)
+    assert ref_resolves(root, "internal/auth/gate.go:1-2")       # start line in range
+    assert not ref_resolves(root, "internal/auth/gate.go:50-60")  # start line out of range
+
+
+def test_resolve_ref_basename_fallback(tmp_path):
+    # Regression: an agent citing a package-relative or bare-basename path (harness defect 5)
+    # should still resolve via a unique basename match under root, with a note recording the
+    # fallback so the correction stays visible rather than silent.
+    from sec_harness.phase_gate import resolve_ref
+    root = _repo(tmp_path)
+    resolved, note = resolve_ref(root, "gate.go:2")  # bare basename, missing internal/auth/ prefix
+    assert resolved is True
+    assert note is not None and "basename search" in note
+    assert not ref_resolves(root, "gate.go:99")  # fallback still enforces line range
+
+
+def test_resolve_ref_ambiguous_basename_unresolved(tmp_path):
+    from sec_harness.phase_gate import resolve_ref
+    root = _repo(tmp_path)
+    (root / "other").mkdir()
+    (root / "other" / "gate.go").write_text("package other\n")
+    resolved, note = resolve_ref(root, "gate.go")
+    assert resolved is False
+    assert note is not None and "ambiguous" in note
+
+
 def test_run_phase_checks(tmp_path):
     root = _repo(tmp_path)
     claims = [
@@ -51,6 +82,24 @@ def test_build_gate_record_survivors():
     assert rec["phase"] == "recon"
     assert rec["rejected_deterministically"] == ["c"]
     assert rec["survivors"] == ["a"]  # b invalidated by the adversary
+    assert rec["warning"] is None
+
+
+def test_build_gate_record_warns_on_total_rejection():
+    # Regression: every claim rejected deterministically must not read as a clean pass —
+    # nothing ever reached the adversary (the silent-total-bypass half of harness defect 5).
+    decisions = [
+        GateDecision("a", "reject", ["ref does not resolve"]),
+        GateDecision("b", "reject", ["ref does not resolve"]),
+    ]
+    rec = build_gate_record("threat-model", decisions)
+    assert rec["sent_to_adversary"] == []
+    assert rec["warning"] is not None and "gate failure" in rec["warning"]
+
+
+def test_build_gate_record_no_warning_when_no_claims():
+    rec = build_gate_record("recon", [])
+    assert rec["warning"] is None
 
 
 def test_write_gate_record(tmp_path):

@@ -33,9 +33,34 @@ def test_unrouted_candidate_classes(tmp_path):
     ws = Workspace(tmp_path)
     ws.ensure()
     write_findings(ws, [_f(1, "xss"), _f(2, "security-other"), _f(3, "security-other"),
-                        _f(4, "unknown"), _f(5, "deps")])
+                        _f(4, "unknown")])
     out = unrouted_candidate_classes(ws, ["xss", "sqli"])
-    assert out == {"security-other": 2, "unknown": 1}  # deps excluded, xss routed
+    assert out == {"security-other": 2, "unknown": 1}  # xss routed
+
+
+def test_unrouted_candidate_classes_flags_untriaged_deps(tmp_path):
+    # Regression for a false-negative trap: deps candidates are not exempt by class name
+    # alone — an untriaged one (still status=="candidate") must surface here, since nothing
+    # else guarantees an SCA triage mechanism actually ran on it (harness defect 6).
+    from sec_harness.partition import unrouted_candidate_classes
+    ws = Workspace(tmp_path)
+    ws.ensure()
+    write_findings(ws, [_f(1, "xss"), _f(2, "deps")])
+    out = unrouted_candidate_classes(ws, ["xss"])
+    assert out == {"deps": 1}
+
+
+def test_unrouted_candidate_classes_triaged_deps_not_flagged(tmp_path):
+    # Once a deps candidate has been triaged (status changed away from "candidate" by whatever
+    # process handled it), it correctly stops appearing here.
+    from sec_harness.partition import unrouted_candidate_classes
+    ws = Workspace(tmp_path)
+    ws.ensure()
+    f = _f(1, "deps")
+    f.status = FindingStatus.REJECTED
+    write_findings(ws, [f])
+    out = unrouted_candidate_classes(ws, [])
+    assert out == {}
 
 
 def test_demote_noise_moves_only_noise_candidates(tmp_path):
