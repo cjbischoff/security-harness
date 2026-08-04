@@ -26,6 +26,10 @@ Read the candidate docs (skim; open the security-relevant ones fully). Extract i
 - `prior_finding` — anything the docs/prior review already flagged (re-check it).
 - `attack_lead` — a concrete place worth investigating the docs point at.
 - `source_pointer` — topic → the source file the docs name (e.g. auth logic).
+When the repo's docs are thin/structural (a directory tree, header comments, a bare README)
+rather than narrative, follow directory-comment breadcrumbs into the implementation files they
+name and record those as `attack_lead`/`source_pointer` items — do not treat the absence of
+prose docs as "no context".
 Ground `where` in real paths (verify with rg/Read; don't invent).
 
 ## Verify claimed controls against code (C1 rework)
