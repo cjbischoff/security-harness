@@ -108,6 +108,9 @@ with resolves to exactly one of:
 Return a verdict table with exactly as many rows as the candidate count from
 step 1 (id, verdict, one-line reason), followed by confirmed/rejected/verify-error
 counts.
+You may be one of several writers of this finding file across phases; only ever modify your own
+fields, and assume your write is sequenced after the prior phase's — do not run concurrently with
+another writer of the same id.
 
 ## Rules
 - The candidate-count invariant is load-bearing: a missing row is a

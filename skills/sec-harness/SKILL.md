@@ -259,9 +259,12 @@ to advance.
    All agents import `references/prompt-constants.md` and wrap untrusted repo text.
    On pass N>1, fill `{{FP_FEEDBACK}}` with `fp_feedback.render_fp_feedback(ws)` output
    (empty string on pass 1 or when there are no prior rejections).
-3. **Adversarial validate** (model: opus — MUST be a DIFFERENT family than the
-   sonnet investigator; parallelism does NOT relax this guard): dispatch validate
-   subagents **in one message**, one per surviving `raw` finding, with
+3. **Judge, then adversarial validate** (model: opus for validate — MUST be a DIFFERENT
+   family than the sonnet investigator; parallelism does NOT relax this guard): dispatch
+   `agents/judge.md` first and wait for its writes to persist before dispatching validate —
+   judge and validate must never run concurrently against the same finding file, since the
+   last writer silently drops the other's field (ISSUE-017). Once judge has completed, dispatch
+   validate subagents **in one message**, one per surviving `raw` finding, with
    `agents/validate.md`. Each tries to REFUTE its finding; survivors → `confirmed`,
    refuted → `rejected`. If only one model family is available, degrade to a fresh-context
    validator and log it — never let the finder be the sole confirmer. A finding with
@@ -346,10 +349,12 @@ Cross-cutting reliability + recall additions, wired into the phases above:
   demotes findings proven unreachable with a cited blocker. `reachability` is the primary
   static-settled-vs-needs-runtime discriminator the red-team phase reads. Recall-safe:
   unassessed ≠ unreachable.
-- **Cheap adjudicator (judge).** In the FP ladder, after critic and before/with
-  adversarial-validate, `agents/judge.md` (no tools, token-cheap) reads only the finder + critic
-  texts and sets `judge_verdict` (`uphold`/`severity-inflated`/`downgrade`) — a cheap
-  inflation-catcher that never hard-rejects (no source access).
+- **Cheap adjudicator (judge).** In the FP ladder, after critic and strictly before
+  adversarial-validate begins, `agents/judge.md` (no tools, token-cheap) reads only the finder +
+  critic texts and sets `judge_verdict` (`uphold`/`severity-inflated`/`downgrade`) — a cheap
+  inflation-catcher that never hard-rejects (no source access). Judge must complete and persist
+  its write before validate starts: never dispatch judge and validate concurrently against the
+  same finding file — the last writer wins and silently drops the other's field (ISSUE-017).
 - **Schema-per-stage validation + in-session repair.** After any structured stage output, call
   `sec_harness.stage_validate.validate_stage(stage, obj)`; on errors, re-prompt the SAME
   subagent with `repair_prompt(...)` (quotes the exact errors, asks to re-emit only broken
