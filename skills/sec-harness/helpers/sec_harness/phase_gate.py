@@ -14,6 +14,7 @@ analysis/context phases that had none.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -169,6 +170,32 @@ def claims_from_context(ctx) -> list[dict]:
         text = getattr(it, "text", "") or ""
         claims.append({"id": f"ctx-{i}", "text": f"{kind}: {text}".strip(),
                        "refs": [where] if where else []})
+    return claims
+
+
+_MD_CITATION = re.compile(
+    r"\b([\w./-]+\.(?:py|js|ts|tsx|jsx|go|java|rb|php|c|cc|cpp|rs)):(\d+)\b"
+)
+
+
+def claims_from_markdown(text: str) -> list[dict]:
+    """Extract gate claims from genuine ``path.ext:line`` citations in free-text markdown.
+
+    Prose file mentions (a bare filename, a README reference) are not claims —
+    only citations with a code extension and an explicit line number count.
+
+    Args:
+        text: Markdown/free-text content to scan.
+
+    Returns:
+        Claims in ``{"id", "text", "refs"}`` form, one per citation found.
+    """
+    claims: list[dict] = []
+    for line in text.splitlines():
+        for m in _MD_CITATION.finditer(line):
+            path, lineno = m.group(1), m.group(2)
+            claims.append({"id": f"md-{len(claims)}", "text": line.strip(),
+                           "refs": [f"{path}:{lineno}"]})
     return claims
 
 

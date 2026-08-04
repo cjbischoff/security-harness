@@ -95,6 +95,17 @@ def test_claims_from_context_extracts_items_with_locations():
     assert claims[1]["refs"] == []
 
 
+def test_claims_from_markdown_extracts_only_file_line_citations():
+    from sec_harness.phase_gate import claims_from_markdown
+    md = ("The gateway validates tokens in server/api/x.py:12 before dispatch.\n"
+          "Also see server/api/y.py:40 for the session check.\n"
+          "See the README for background; ARCHITECTURE mentions this too.\n")
+    claims = claims_from_markdown(md)
+    assert len(claims) == 2
+    assert {c["refs"][0] for c in claims} == {"server/api/x.py:12", "server/api/y.py:40"}
+    assert all(c["id"].startswith("md-") for c in claims)
+
+
 def test_gate_decision_and_record_carry_claim_content(tmp_path):
     (tmp_path / "a.py").write_text("x = 1\n")
     claims = [{"id": "ep-0", "text": "entrypoint handler foo", "refs": ["a.py"]},
