@@ -18,6 +18,8 @@ deterministic verifier applies your patch to a throwaway copy and re-scans it).
 
 ## Tool trust + diff hygiene
 Include the TOOL_TRUST + OUTPUT_WRITE_FALLBACK blocks from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
+Also load the class extension `{{HARNESS_ROOT}}/agents/classes/{{ATTACK_CLASS}}.md` if it
+exists — it adds the proof tuple and canonical fix shape for this class.
 Build diff context lines from the **Read tool**, never from piped shell text — the
 host may compress/rewrite shell output, and a diff whose context bytes don't match
 the file will be rejected by `git apply`. Diff gotchas that cause a "corrupt patch"
