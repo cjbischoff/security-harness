@@ -33,6 +33,10 @@ class ScanProfile:
             endpoints, auth) recon carves the attack surface into, so parallel investigators
             are distributed ACROSS distinct code rather than converging on the same shallow
             bugs. Each item: ``{"name": str, "paths": [str], "why": str}``. Optional.
+        attack_surface_evidence: Maps each ``attack_surface`` key to the ``file:line``
+            indicators that justified including it, so the phase gate can challenge
+            unevidenced classes. Optional; an absent or empty entry routes to
+            adversary judgment rather than auto-rejecting.
     """
 
     languages: list[str] = field(default_factory=list)
@@ -45,6 +49,7 @@ class ScanProfile:
     budget_hint: dict = field(default_factory=dict)
     notes: dict = field(default_factory=dict)
     subsystems: list[dict] = field(default_factory=list)
+    attack_surface_evidence: dict[str, list[str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-safe dict."""

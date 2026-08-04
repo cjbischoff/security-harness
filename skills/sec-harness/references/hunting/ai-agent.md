@@ -32,6 +32,11 @@ transport is still HTTP, tools still hit SQL/shell/filesystem sinks, and
 
 ## Classes
 
+Each class below is selected independently, on its OWN evidence indicator — never as a bundle
+just because the repo has an LLM/agent loop. In particular, `mcp-trust-inheritance` requires a
+live MCP server/client trust boundary you can point at in code (a sub-agent spawn, an MCP
+connection); the mere presence of an LLM call does not justify it.
+
 **prompt-injection** (sub-types, all indicator: untrusted text reaching a model
 context or a model-emitted argument reaching a sink)
 - *Indirect (via retrieval/ingestion)*: sink/indicator — a RAG document, indexed

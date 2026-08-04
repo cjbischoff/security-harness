@@ -54,6 +54,21 @@ def test_demote_noise_moves_only_noise_candidates(tmp_path):
     assert demote_noise(ws) == 0   # idempotent: nothing left to demote
 
 
+def test_demote_noise_routes_high_severity_unknown_to_security_other(tmp_path):
+    from sec_harness.models import Finding, FindingStatus, Severity
+    from sec_harness.partition import demote_noise
+    from sec_harness.workspace import Workspace, read_findings, write_findings
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    f = Finding(id="C-1", rule_id="js/insufficient-password-hash", cls="unknown",
+                status=FindingStatus.CANDIDATE, severity=Severity.HIGH,
+                file="a.py", line=1, message="m")
+    write_findings(ws, [f])
+    demote_noise(ws)
+    got = read_findings(ws)[0]
+    assert got.status is FindingStatus.CANDIDATE      # not demoted
+    assert got.cls == "security-other"                # rerouted
+
+
 def test_reconcile_plan_adds_real_unrouted_classes(tmp_path):
     from sec_harness.models import Finding, FindingStatus, Severity
     from sec_harness.partition import reconcile_plan

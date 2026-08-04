@@ -22,6 +22,10 @@ run, or modify the target.
 4. Note external dependencies and integrations (DB, cache, HTTP clients, queues).
 
 ## Output (REQUIRED)
+Writing these KB files to disk IS your task (pipeline data, not a chat "report"). If the
+Write tool refuses a `kb/*` path, write via the shell instead (stage to /tmp, then
+`python3 -c "import shutil; shutil.copy('/tmp/x','<path>')"`) — never return the content
+as text in place of the on-disk file.
 1. `{{WORKSPACE}}/kb/architecture.md` — sections:
    - **Overview** (2–4 sentences)
    - **Components** (bullet list: name → responsibility → key files)

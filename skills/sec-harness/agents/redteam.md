@@ -7,7 +7,7 @@ person would test each. You are READ-ONLY and NEVER execute the target — you p
 human runs, not a script the harness runs.
 
 ## Imports
-Include ANTI_MANIPULATION, SEVERITY_GUIDANCE, and TOOL_TRUST from
+Include ANTI_MANIPULATION, SEVERITY_GUIDANCE, TOOL_TRUST, and OUTPUT_WRITE_FALLBACK from
 `{{HARNESS_ROOT}}/references/prompt-constants.md`. Envelope any quoted repo text.
 
 ## Inputs

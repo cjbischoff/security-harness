@@ -1,6 +1,7 @@
 """Tests for Workspace path overrides."""
 
 import json
+from pathlib import Path
 
 from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.workspace import (
@@ -20,6 +21,24 @@ def test_defaults_unchanged(tmp_path):
     assert ws.findings_dir == tmp_path / "findings"
     assert ws.sarif_path == tmp_path / "report.sarif"
     assert ws.report_path == tmp_path / "report.md"
+
+
+def test_accepts_string_root(tmp_path):
+    """A str root is coerced to Path so agent-authored commands don't crash.
+
+    The agent prompts embed ``Workspace('<path>')`` with a bare string; without
+    coercion the first path property raises ``TypeError`` (str / str).
+    """
+    ws = Workspace(str(tmp_path))
+    assert ws.kb == tmp_path / "kb"
+    assert isinstance(ws.root, Path)
+
+
+def test_coerces_string_overrides(tmp_path):
+    """String override paths are coerced too."""
+    ws = Workspace(str(tmp_path), findings_dir_override=str(tmp_path / "f"))
+    assert ws.findings_dir == tmp_path / "f"
+    assert isinstance(ws.findings_dir, Path)
 
 
 def test_overrides(tmp_path):
@@ -149,3 +168,22 @@ def test_ensure_creates_runs(tmp_path):
     ws = Workspace(tmp_path)
     ws.ensure()
     assert ws.runs.is_dir()
+
+
+def test_read_findings_skips_malformed_without_crashing(tmp_path, capsys):
+    """One malformed finding must not crash the pipeline (dogfood ISSUE-015).
+
+    read_findings returns the parseable findings and warns (to stderr) about the
+    skipped file, rather than raising and halting every downstream phase.
+    """
+    ws = Workspace(tmp_path)
+    write_findings(ws, [_finding("F-1")])
+    # a finding with an out-of-enum severity (exactly what an agent emitted)
+    (ws.findings_dir / "BAD.json").write_text(
+        json.dumps({"id": "BAD", "rule_id": "r", "cls": "sqli", "status": "raw",
+                    "severity": "informational", "file": "a.py", "line": 1, "message": "m"})
+    )
+    findings = read_findings(ws)  # must NOT raise
+    assert [f.id for f in findings] == ["F-1"]
+    err = capsys.readouterr().err
+    assert "BAD.json" in err

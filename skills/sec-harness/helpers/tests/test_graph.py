@@ -204,6 +204,32 @@ def test_build_and_write_tier1_attaches_injected_facts(tmp_path):
     assert "sca" in sources and "crypto-policy" in sources
 
 
+def test_call_edges_respect_word_boundary_and_substrings(tmp_path):
+    """Call-edge detection must match whole call tokens, not substrings.
+
+    Locks the semantics the optimized detector must preserve: a body that calls
+    ``foobar()`` creates an edge to ``foobar`` but NOT to the substring name
+    ``bar``; a body that calls both creates both edges.
+    """
+    src = tmp_path / "mod.py"
+    src.write_text(
+        "def bar():\n"
+        "    return 1\n"
+        "def foobar():\n"
+        "    return 2\n"
+        "def only_foobar():\n"
+        "    return foobar()\n"
+        "def both():\n"
+        "    return bar() + foobar()\n"
+    )
+    graph = g.build_tier1(tmp_path, sha="x")
+    calls = {(e.src.split(":")[-1], e.dst.split(":")[-1]) for e in graph.edges if e.kind == "calls"}
+    assert ("only_foobar", "foobar") in calls
+    assert ("only_foobar", "bar") not in calls  # substring must not match
+    assert ("both", "bar") in calls
+    assert ("both", "foobar") in calls
+
+
 def test_symbol_at_returns_enclosing_symbol():
     graph = g.build_tier1(FIXTURE, sha="x")
     # handler is defined at app/api.py:4; a line at/after 4 resolves to it

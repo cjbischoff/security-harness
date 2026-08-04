@@ -21,6 +21,9 @@ CWE_CLS: dict[str, str] = {
     "347": "jwt", "444": "request-smuggling", "1321": "prototype-pollution",
     "1385": "cswsh", "441": "excessive-agency", "384": "authn",
     "840": "business-logic", "639": "authz", "352": "authz",
+    # resource-exhaustion / DoS (classes/resource.md) — otherwise these fall to
+    # "unknown" and demote_noise silently drops them (dogfood ISSUE-011).
+    "400": "resource", "770": "resource", "834": "resource", "674": "resource",
 }
 
 _CWE_RE = re.compile(r"cwe-0*(\d+)")
@@ -52,6 +55,13 @@ _RULE_ID_CLS: dict[str, str] = {
     "stack-trace-exposure": "clear-text-logging",
     "tainted-path": "path-traversal",
     "path-injection": "path-traversal",
+    # resource-exhaustion / DoS CodeQL rules (dogfood ISSUE-011) — route to the
+    # `resource` class (classes/resource.md) instead of orphaning to "unknown".
+    "loop-bound-injection": "resource",
+    "missing-rate-limiting": "resource",
+    "polynomial-redos": "resource",
+    "redos": "resource",
+    "resource-exhaustion": "resource",
 }
 
 

@@ -22,6 +22,10 @@ Use these exact keys (lowercase) in `scan-profile.json`.
 | `deps` | Vulnerable dependencies | lockfiles / manifests (handled by SCA, not an investigation agent) | static only |
 | `prompt-injection` | LLM prompt injection / unsafe tool use / guardrail bypass | `langchain`, `langgraph`, `openai`, `anthropic`, `bedrock`, `.invoke(`, `bind_tools`, `mcp`, tool registration, user text → model prompt, model output → sink (exec/DB/fetch) | static only |
 | `webhook-verification` | Missing/incorrect signature verification | `X-Shopify-Hmac-Sha256`, `Stripe-Signature`, `verifyWebhook`, `crypto.timingSafeEqual`, `hmac`, raw-body handling on a webhook/callback route | static only |
+| `expr-eval-rce` | Sandboxed expression/rule-engine escape | `jsep`, `expr-eval`, `mathjs`, `vm.runInContext`, `callee.apply`, `constructor.constructor`, custom formula/rules engines | static only |
+
+`expr-eval-rce` is distinct from `deserialization` and `ssti`: the sink is a custom
+evaluator's own call/apply mechanism, not `eval()` or a template engine.
 
 ## Selection guidance for recon
 

@@ -29,6 +29,9 @@ Set `judge_verdict` on the finding to one of:
 - `downgrade` — the critic's concern is unrebutted; hand to the validator at low confidence
   (never a hard reject here — you have no source access).
 Append a one-line `history` entry with the reason. Return a table: id, verdict, one-line reason.
+You may be one of several writers of this finding file across phases; only ever modify your own
+fields, and assume your write is sequenced after the prior phase's — do not run concurrently with
+another writer of the same id.
 
 ## Rules
 - You never hard-reject (no source access) and never confirm — you order and flag for the

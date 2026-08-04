@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from sec_harness.clsmap import is_noise_class
-from sec_harness.models import Finding, FindingStatus
+from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.workspace import Workspace, read_findings, write_findings
 
 
@@ -63,12 +63,21 @@ def demote_noise(ws: Workspace) -> int:
     """
     findings = read_findings(ws)
     n = 0
+    dirty = False
     for f in findings:
-        if f.status is FindingStatus.CANDIDATE and is_noise_class(f.cls):
+        if f.status is not FindingStatus.CANDIDATE:
+            continue
+        if f.cls == "unknown" and f.severity in (Severity.HIGH, Severity.CRITICAL):
+            f.cls = "security-other"
+            f.history.append({"event": "partition:reroute-high-sev-unknown"})
+            dirty = True
+            continue
+        if is_noise_class(f.cls):
             f.status = FindingStatus.INFORMATIONAL
             f.history.append({"event": "partition:demoted-noise", "cls": f.cls})
             n += 1
-    if n:
+            dirty = True
+    if dirty:
         write_findings(ws, findings)
     return n
 

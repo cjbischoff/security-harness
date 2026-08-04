@@ -77,6 +77,18 @@ def test_claims_from_profile_extracts_entrypoints_and_subsystems():
     assert sub["refs"] == ["src/auth.py"]
 
 
+def test_claims_from_profile_extracts_attack_surface_claims():
+    from types import SimpleNamespace
+
+    from sec_harness.phase_gate import claims_from_profile
+    p = SimpleNamespace(entrypoints=[], subsystems=[], attack_surface=["sqli"],
+                        agents_to_spawn=["sqli"],
+                        attack_surface_evidence={"sqli": ["src/db.py:10"]})
+    claims = claims_from_profile(p)
+    surf = next(c for c in claims if c["id"] == "surf-sqli")
+    assert surf["refs"] == ["src/db.py:10"] and "sqli" in surf["text"]
+
+
 def test_claims_from_context_extracts_items_with_locations():
     from sec_harness.context import Context, ContextItem
     from sec_harness.phase_gate import claims_from_context
@@ -93,6 +105,17 @@ def test_claims_from_context_extracts_items_with_locations():
     assert c0["refs"] == ["src/gateway.py:10"]
     assert "trust_boundary" in c0["text"] and "API gateway terminates TLS" in c0["text"]
     assert claims[1]["refs"] == []
+
+
+def test_claims_from_markdown_extracts_only_file_line_citations():
+    from sec_harness.phase_gate import claims_from_markdown
+    md = ("The gateway validates tokens in server/api/x.py:12 before dispatch.\n"
+          "Also see server/api/y.py:40 for the session check.\n"
+          "See the README for background; ARCHITECTURE mentions this too.\n")
+    claims = claims_from_markdown(md)
+    assert len(claims) == 2
+    assert {c["refs"][0] for c in claims} == {"server/api/x.py:12", "server/api/y.py:40"}
+    assert all(c["id"].startswith("md-") for c in claims)
 
 
 def test_gate_decision_and_record_carry_claim_content(tmp_path):

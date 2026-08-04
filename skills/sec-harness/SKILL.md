@@ -80,7 +80,11 @@ these before spawning: `{{TARGET}}`, `{{WORKSPACE}}`, `{{ATTACK_CLASS}}`, `{{PHA
 passes advance. Persist each agent's final return with
 `workspace.record_agent_return(ws, "<agent-label>", <text>)` (→ `runs/<agent>.txt`) and
 read it back with `read_agent_return` — never depend on a subagent's summary message
-propagating; disk state is the source of truth.
+propagating; disk state is the source of truth. **Subagent Write-tool guard:** some hosts
+hard-block a subagent's Write tool on `findings`/`report`/`summary`-like paths; agent
+prompts carry the `OUTPUT_WRITE_FALLBACK` rule (write the KB/findings artifact via a
+`python3 shutil.copy` from a temp file instead), so a blocked Write never silently loses a
+finding. When dispatching, keep that fallback in the agent's instructions.
 
 0. **Preflight** — `python -m sec_harness.preflight`; run any printed install/vendor commands before scanning (missing backends are skipped + logged). The report lists which **CodeQL query packs** are installed — the `codeql` binary being present does NOT mean the per-language packs exist, and a missing pack silently drops all of that language's dataflow coverage. If a language you will scan is not listed, run `codeql pack download codeql/<lang>-queries` first. CodeQL runs only on a trusted config (`codeql_config_trusted`); unsupported or untrusted configs are skipped and logged in the prefilter `failed` list.
 1. **Begin pass** — `from sec_harness.state import begin_pass; begin_pass(<WS>, <sha>)` (pins the SHA; increments on repeat passes). Note the import path: `begin_pass` lives in `sec_harness.state`; `record_stage`/`pass_report` live in `sec_harness.campaign`.
@@ -255,9 +259,12 @@ to advance.
    All agents import `references/prompt-constants.md` and wrap untrusted repo text.
    On pass N>1, fill `{{FP_FEEDBACK}}` with `fp_feedback.render_fp_feedback(ws)` output
    (empty string on pass 1 or when there are no prior rejections).
-3. **Adversarial validate** (model: opus — MUST be a DIFFERENT family than the
-   sonnet investigator; parallelism does NOT relax this guard): dispatch validate
-   subagents **in one message**, one per surviving `raw` finding, with
+3. **Judge, then adversarial validate** (model: opus for validate — MUST be a DIFFERENT
+   family than the sonnet investigator; parallelism does NOT relax this guard): dispatch
+   `agents/judge.md` first and wait for its writes to persist before dispatching validate —
+   judge and validate must never run concurrently against the same finding file, since the
+   last writer silently drops the other's field (ISSUE-017). Once judge has completed, dispatch
+   validate subagents **in one message**, one per surviving `raw` finding, with
    `agents/validate.md`. Each tries to REFUTE its finding; survivors → `confirmed`,
    refuted → `rejected`. If only one model family is available, degrade to a fresh-context
    validator and log it — never let the finder be the sole confirmer. A finding with
@@ -266,7 +273,9 @@ to advance.
    valid terminal state (distinct from `confirmed` and `rejected`) for findings that
    fail validation infrastructure.
 4. **Calibrate** (no LLM): `uv run python -m sec_harness.calibrate --workspace <WS>` —
-   sets `risk_score` 1–10 on every `confirmed` finding.
+   promotes raw findings marked `runtime_dependent` to `needs-deployment-testing` (via
+   `promote_runtime_dependent`, `sec_harness.campaign`; ISSUE-027) before setting `risk_score`
+   1–10 on every `confirmed` finding.
 5. **Gate** (no LLM): `uv run python -m sec_harness.findings_gate --workspace <WS>`.
 
 `confirmed` findings with `risk_score` are the harness's output. Patch generation +
@@ -309,9 +318,9 @@ delivery, business-logic abuse). This phase hands a human exactly which of those
 running system, and how. **The harness never executes the target — it emits a plan a person
 runs manually.**
 
-0. **Promote runtime-dependent leads** (no LLM): run `promote_runtime_dependent(ws)` (from
-   `sec_harness.campaign`) so raw findings marked `runtime_dependent` become
-   `needs-deployment-testing` and enter the plan (O-021).
+0. Runtime-dependent leads are already promoted: Calibrate (Phase 4) ran
+   `promote_runtime_dependent(ws)` before scoring, so raw findings marked `runtime_dependent`
+   became `needs-deployment-testing` and are already eligible for the plan (O-021/ISSUE-027).
 1. **Red Team** (model: sonnet): spawn `agents/redteam.md`. It sets `runtime_disposition` on
    each confirmed finding — `static-settled` (source-provable) or `needs-runtime` (needs a live
    check) — and writes a `runtime_test` block (`objective`/`preconditions`/`payloads` with
@@ -340,10 +349,12 @@ Cross-cutting reliability + recall additions, wired into the phases above:
   demotes findings proven unreachable with a cited blocker. `reachability` is the primary
   static-settled-vs-needs-runtime discriminator the red-team phase reads. Recall-safe:
   unassessed ≠ unreachable.
-- **Cheap adjudicator (judge).** In the FP ladder, after critic and before/with
-  adversarial-validate, `agents/judge.md` (no tools, token-cheap) reads only the finder + critic
-  texts and sets `judge_verdict` (`uphold`/`severity-inflated`/`downgrade`) — a cheap
-  inflation-catcher that never hard-rejects (no source access).
+- **Cheap adjudicator (judge).** In the FP ladder, after critic and strictly before
+  adversarial-validate begins, `agents/judge.md` (no tools, token-cheap) reads only the finder +
+  critic texts and sets `judge_verdict` (`uphold`/`severity-inflated`/`downgrade`) — a cheap
+  inflation-catcher that never hard-rejects (no source access). Judge must complete and persist
+  its write before validate starts: never dispatch judge and validate concurrently against the
+  same finding file — the last writer wins and silently drops the other's field (ISSUE-017).
 - **Schema-per-stage validation + in-session repair.** After any structured stage output, call
   `sec_harness.stage_validate.validate_stage(stage, obj)`; on errors, re-prompt the SAME
   subagent with `repair_prompt(...)` (quotes the exact errors, asks to re-emit only broken

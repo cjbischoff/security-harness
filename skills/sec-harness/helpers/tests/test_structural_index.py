@@ -24,6 +24,30 @@ def test_list_definitions_js():
     assert "beta" in defs
 
 
+def test_list_definitions_finds_typed_const_arrow(tmp_path):
+    p = tmp_path / "a.ts"
+    p.write_text(
+        "export const handler: RequestHandler = async (req, res) => {\n"
+        "  return tool(req)\n"
+        "}\n\nfunction tool(x) { return x }\n"
+    )
+    names = {n for n, _ in list_definitions(p)}
+    assert "handler" in names
+
+
+def test_list_definitions_finds_class_field_arrow(tmp_path):
+    p = tmp_path / "b.js"
+    p.write_text(
+        "class Foo {\n  bar = () => {\n    return baz()\n  }\n}\n\n"
+        "function baz() { return 1 }\n"
+    )
+    names = {n for n, _ in list_definitions(p)}
+    assert "bar" in names
+    guard = tmp_path / "c.js"
+    guard.write_text("x = 5\n")
+    assert "x" not in {n for n, _ in list_definitions(guard)}
+
+
 def test_get_function_boundary_python_indent():
     # alpha starts line 1, body ends before the blank line / next def
     start, end = get_function_boundary(STRUCT / "sample.py", 1)

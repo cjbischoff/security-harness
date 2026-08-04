@@ -9,6 +9,8 @@ that configures every later phase. You NEVER build, run, or modify the target.
 - Workspace root: `{{WORKSPACE}}`
 - Attack-class catalog: read `{{HARNESS_ROOT}}/references/attack-classes.md` for valid class keys and their ripgrep indicators.
 - Schema: your output MUST validate against `{{HARNESS_ROOT}}/references/scan-profile.schema.json`.
+- `{{WORKSPACE}}/kb/context.json` if present: C1 context leads (trust-tagged) inform — never
+  override — evidence-based surface selection; a doc claim is not an indicator.
 
 ## Allowed tools
 - `rg` (ripgrep) for content/pattern search.
@@ -36,12 +38,19 @@ as you spot them.
    (e.g. a controller with 15 `*Action` methods) record 1–3 representative
    security-relevant ones, not every method. Keep the list under ~40 rows on a
    large repo — it orients later phases, it is not an exhaustive route table.
+   Cite a symbol only if you have seen it in the file; if unsure, cite the file and a textual
+   hint, never a guessed function name. A phantom symbol sends investigate to a line that does
+   not exist.
 4. **Runnable:** set `true` only if the repo DECLARES a build/run/test path
    (Dockerfile, `make`, test config, `scripts` in package.json). This is
    informational only — you still never execute anything.
 5. **Attack surface:** for each attack-class key in the catalog, include it in
    `attack_surface` ONLY if at least one indicator is present in the code, or a
    detected framework strongly implies it. Omit classes with no evidence.
+   **Evidence:** for every key you add to `attack_surface`, record the `file:line`
+   indicator(s) that justified it in `attack_surface_evidence` (`{class_key: [file:line,
+   ...]}`). A framework-implied class with no direct indicator gets an empty list — the
+   phase gate routes those to adversary judgment instead of auto-rejecting them.
    **Companion hunting docs (F2):** also select relevant `references/hunting/*.md`
    companions per the "Domain-specific classes" table in `attack-classes.md`
    (JWT/OAuth/SAML→web-protocol-auth; browser/DOM/React→client-side;
@@ -49,6 +58,11 @@ as you spot them.
    only→memory-native) and record them in `notes.hunting_docs` so investigate +
    threat-model import them. Include any domain-specific class keys they add in
    `attack_surface`/`agents_to_spawn` when indicators are present.
+   **Authz detection:** when handler auth is applied via a factory/wrapper (e.g.
+   `createBaseHandler`, a decorator, a base class), grepping the leaf handler for
+   `apiToken`/`isInvalidToken` will miss it. Trace one level of wrapper indirection; if you
+   cannot resolve it, record "indirect auth dispatch — not verified" rather than emitting a
+   false authz-gap lead.
 6. **sast_plan:** choose backends:
    - `semgrep`: ALWAYS emit `"run": true` alongside `rulesets` (every backend block carries an explicit `run` — a rulesets-but-no-run block is a config bug). Set `rulesets` to the vendored per-language dirs that exist, e.g. `["rules/semgrep/<lang>"]` for each detected language. Paths are relative to `{{HELPERS_DIR}}` (where the prefilter runs) — do NOT prefix with `{{HELPERS_DIR}}/`. Fall back to `["rules/smoke.yaml"]` only if no vendored dir exists. Leave `security_only` unset (defaults true — the prefilter drops non-security lint and reports the count).
    - `codeql`: set `{"run": true, "languages": [<codeql-supported langs present>], "suite": "security-extended"}` when a CodeQL-supported language is present (go, python, javascript, java, csharp, cpp, ruby, swift); else `{"run": false, "reason": "..."}`.

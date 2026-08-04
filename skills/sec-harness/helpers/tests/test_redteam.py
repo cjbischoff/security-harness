@@ -1,7 +1,14 @@
 """Tests for the red-team static->runtime bridge phase."""
 
 from sec_harness.models import Finding, FindingStatus, Severity
-from sec_harness.redteam import discriminate, render_plan, write_plan
+from sec_harness.phase_gate import write_gate_record
+from sec_harness.redteam import (
+    _above_bar,
+    build_redteam_gate_record,
+    discriminate,
+    render_plan,
+    write_plan,
+)
 from sec_harness.workspace import Workspace, write_findings
 
 
@@ -13,6 +20,12 @@ def _f(fid, status=FindingStatus.CONFIRMED, risk=8, disposition=None, runtime_te
         runtime_disposition=disposition, runtime_test=runtime_test,
         evidence_sources=["semgrep:rule"],
     )
+
+
+def test_above_bar_clears_prime_manual_test_regardless_of_risk():
+    f = _f("P", risk=None, severity=Severity.LOW)
+    f.history = [{"event": "redteam:prime-manual-test"}]
+    assert _above_bar(f, min_risk=7) is True
 
 
 def test_discriminate_partitions():
@@ -99,6 +112,18 @@ def test_lead_carrier_without_receipt_is_not_a_directive():
     disc = discriminate([lead], min_risk=7)
     assert [f.id for f in disc["below_bar"]] == ["A-3"]
     assert disc["needs_runtime"] == []
+
+
+def test_build_redteam_gate_record_from_needs_runtime_finding(tmp_path):
+    f = _rt("A-6", Severity.HIGH, 8, evidence_sources=["ast-grep:sink"])
+    rec = build_redteam_gate_record([f], verdicts={"A-6": "WEAKENED"})
+    assert rec["phase"] == "redteam"
+    assert rec["claims"]["A-6"]["refs"] == [f"{f.file}:{f.line}"]
+    assert rec["survivors"] == ["A-6"]  # WEAKENED, not INVALIDATED -> survives
+    ws = Workspace(tmp_path)
+    ws.ensure()
+    path = write_gate_record(ws, "redteam", rec)
+    assert path.name == "redteam.json"
 
 
 def test_needs_runtime_sorts_critical_before_low_when_risk_score_is_none():
