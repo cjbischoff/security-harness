@@ -93,7 +93,7 @@ T1. **Tier-1 substrate** (no LLM) — `python -m sec_harness.graph build --targe
 2. **Recon** (sonnet) — `agents/recon.md` → `kb/scan-profile.json`. Validate with `load_profile`. **→ phase gate** (`agents/phase-adversary.md`, opus).
 3. **Architecture** (sonnet) — `agents/architecture.md` → `kb/architecture.md` + `kb/entities/`. **→ phase gate**.
 4. **Threat model** (sonnet) — `agents/threat-model.md` → `kb/THREAT_MODEL.md` (hunt list). **→ phase gate**.
-5. **Prefilter** (no LLM) — `from sec_harness.prefilter import run_prefilter; run_prefilter(ws, target, profile)` (args: `Workspace`, target path, the `ScanProfile` from recon — NOT the raw `sast_plan` dict). Backends run concurrently (one unit per semgrep ruleset / codeql language); results are merged deterministically (sorted, `C-####` ids) so serial and concurrent runs are byte-identical. Returns `{candidates, backends_run, skipped, failed, excluded, dropped_nonsecurity, skipped_reasons}`: `skipped_reasons` maps each backend that did NOT run to a reason (`disabled`/`absent`/`untrusted`/`pack-missing`); `dropped_nonsecurity` counts non-security semgrep lint dropped by the security-only filter; `failed` lists backends that errored. **A scan is only clean if every PLANNED backend ran. STOP and surface a setup error if `backends_run` is empty OR any planned backend appears in `failed` / `skipped_reasons` (e.g. `codeql: pack-missing` = a missing query pack → zero dataflow for that language). A partial scan (semgrep ran, codeql failed) is a coverage hole, not "no findings" — do NOT report it as clean.** Then `demote_noise(ws)` (moves log-injection/clear-text-logging/unknown candidates to `informational`) and `agents = reconcile_plan(ws, profile.agents_to_spawn)` (routes real-security classes recon omitted). Spawn investigate agents over the reconciled `agents`; the general-triage `security-other` agent handles any residual unrouted classes.
+5. **Prefilter** (no LLM) — `from sec_harness.prefilter import run_prefilter; run_prefilter(ws, target, profile)` (args: `Workspace`, target path, the `ScanProfile` from recon — NOT the raw `sast_plan` dict). Backends run concurrently (one unit per semgrep ruleset / codeql language); results are merged deterministically (sorted, `C-####` ids) so serial and concurrent runs are byte-identical. Returns `{candidates, backends_run, skipped, failed, excluded, dropped_nonsecurity, skipped_reasons}`: `skipped_reasons` maps each backend that did NOT run to a reason (`disabled`/`absent`/`untrusted`/`pack-missing`); `dropped_nonsecurity` counts non-security semgrep lint dropped by the security-only filter; `failed` lists backends that errored. **A scan is only clean if every PLANNED backend ran. STOP and surface a setup error if `backends_run` is empty OR any planned backend appears in `failed` / `skipped_reasons` (e.g. `codeql: pack-missing` = a missing query pack → zero dataflow for that language). A partial scan (semgrep ran, codeql failed) is a coverage hole, not "no findings" — do NOT report it as clean.** Then `demote_noise(ws)` (moves log-injection/clear-text-logging/unknown candidates to `informational`), `agents = reconcile_plan(ws, profile.agents_to_spawn)` (routes real-security classes recon omitted), and `agents = merge_custom_check_classes(agents, discover_custom_checks(target))` (from `sec_harness.custom_checks`; adds any in-repo `.sec-harness/checks/` bundles the target declares). Spawn investigate agents over the reconciled `agents`; for any class that is a custom-check id, append `custom_check_instructions(check)` to the standard `agents/investigate.md` prompt after the shared `prompt-constants.md` blocks, per its check's own bundle. The general-triage `security-other` agent handles any residual unrouted classes.
 6. **Investigate** (sonnet, parallel over `scan-profile.agents_to_spawn`) — `agents/investigate.md` per class → `raw`/`rejected`/new `A-####`.
 7. **Dedupe** (no LLM) — `python -m sec_harness.dedupe --workspace <WS>`.
 8. **Critic** (sonnet) — `agents/critic.md` (production viability) → rejects non-shipping.
@@ -197,9 +197,17 @@ Run AFTER the KB build. Prerequisites in the workspace: `kb/scan-profile.json`,
    planned class) — even at 0 SAST candidates. A 0-candidate business-logic repo
    is a coverage story, not a clean bill (O-007). Then dispatch the investigate
    subagents **in ONE message** — one per
-   class in `scan-profile.json` `agents_to_spawn`, each with `agents/investigate.md`
+   class in `scan-profile.json` `agents_to_spawn` (after merging in any custom-check
+   classes via `sec_harness.custom_checks.discover_custom_checks(target)` +
+   `merge_custom_check_classes`), each with `agents/investigate.md`
    (substituting `{{ATTACK_CLASS}}`, `{{TARGET}}`, `{{WORKSPACE}}`) and handed its
-   partition — so they run concurrently.
+   partition — so they run concurrently. When `{{ATTACK_CLASS}}` is a custom-check id,
+   append that check's `custom_check_instructions(check)` markdown to the assembled
+   prompt after the shared `prompt-constants.md` blocks (`ANTI_MANIPULATION`,
+   `TOOL_TRUST`, `SEVERITY_PRECONDITION`, etc.) so it gets the same trust envelope as
+   every built-in class. A custom-check candidate goes through the full existing gate
+   ladder — dedupe, critic → judge → validate → trace, calibrate — exactly like any
+   other finding; there is no lighter-weight path for org-authored checks.
    **Do not orphan candidates.** The classifier produces classes beyond
    `agents_to_spawn` — `security-other`/`unknown` for vendored rules that carry no
    `cls`/CWE, and these can hold high-value hits (command-exec, weak-crypto).

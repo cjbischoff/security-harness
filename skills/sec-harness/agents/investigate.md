@@ -73,7 +73,7 @@ a true positive you silently filter here is gone for good.
    reason this is NOT exploitable (missing reachability, a control you haven't read,
    attacker can't reach the source). If that reason holds, reject or downgrade it; if
    you genuinely cannot defeat it, confirm. State the attempt in the finding's history.
-5. Decide:
+5. Decide. **Before writing `file`/`line` for candidate N, re-confirm it is candidate N's own cited location, not a sibling candidate's** — when triaging a grouped batch (per step 1's large-bucket grouping), it is easy to attribute the wrong sink line to a finding after reading several similar-looking sinks in sequence. Re-read the specific `file:line` you are about to write against the candidate's original citation before committing it.
    - **Confirmed** (a real, reachable issue that clears all gates AND survived your own
      refutation): write the finding with `status: "raw"`, a `dataflow` array of
      `"expr @ file:line"` hops from source to sink, an `evidence` snippet, a `preconditions`

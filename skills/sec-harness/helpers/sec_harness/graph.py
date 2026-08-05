@@ -20,7 +20,7 @@ from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from sec_harness import structural_index
+from sec_harness import entrypoints, structural_index
 from sec_harness.workspace import Workspace
 
 NO_PATH_RECEIPT = "structural-index:no-path"
@@ -171,12 +171,17 @@ def build_tier1(target_root: str | Path, sha: str) -> Graph:
         if not path.is_file() or path.suffix not in _SOURCE_EXTS:
             continue
         rel = path.relative_to(root).as_posix()
+        lang = _lang_of(rel)
+        file_lines = path.read_text().splitlines()
         for name, line in structural_index.list_definitions(path):
             node_id = f"{rel}:{line}:{name}"
-            nodes.append(Node(node_id, "symbol", rel, line, name,
-                              {"lang": _lang_of(rel), "unresolvable": False}))
-            by_name.setdefault(name, []).append(node_id)
             start, end = structural_index.get_function_boundary(path, line)
+            reason = entrypoints.classify_entry_point(lang, file_lines, start, end)
+            attrs = {"lang": lang, "unresolvable": False, "is_entry_point": reason is not None}
+            if reason is not None:
+                attrs["entry_point_reason"] = reason
+            nodes.append(Node(node_id, "symbol", rel, line, name, attrs))
+            by_name.setdefault(name, []).append(node_id)
             bodies.append((node_id, str(path), start, end))
 
     # Call-edge detection. Equivalent to matching r"\b<name>\s*\(" against each
@@ -305,6 +310,18 @@ def is_unresolvable(graph: Graph, node_id: str) -> bool:
     """True if ``node_id`` is flagged dynamic/reflective/config-wired (route to runtime)."""
     n = graph.node(node_id)
     return bool(n and n.attrs.get("unresolvable", False))
+
+
+def entry_point_nodes(graph: Graph) -> list[Node]:
+    """Return all nodes flagged as entry points during Tier-1 build.
+
+    Args:
+        graph: The substrate to query.
+
+    Returns:
+        Nodes whose ``attrs["is_entry_point"]`` is true, in graph node order.
+    """
+    return [n for n in graph.nodes if n.attrs.get("is_entry_point")]
 
 
 def symbol_at(graph: Graph, file: str, line: int) -> str | None:
