@@ -31,6 +31,27 @@ class CustomCheck:
     excluded_paths: list[str] = field(default_factory=list)
 
 
+def _resolve_within(bundle_dir: Path, filename: str) -> Path | None:
+    """Resolve ``filename`` against ``bundle_dir``, rejecting any escape.
+
+    A manifest's file references come from the target repo — untrusted content per
+    this harness's threat model — so an absolute path or a ``../`` traversal must not
+    be allowed to resolve outside the bundle directory.
+
+    Args:
+        bundle_dir: The check bundle's own directory.
+        filename: The manifest-specified filename (``instructionsFile``/``semgrepRule``).
+
+    Returns:
+        The resolved path if it stays within ``bundle_dir``, else ``None``.
+    """
+    resolved_bundle_dir = bundle_dir.resolve()
+    candidate = (bundle_dir / filename).resolve()
+    if candidate != resolved_bundle_dir and resolved_bundle_dir not in candidate.parents:
+        return None
+    return bundle_dir / filename
+
+
 def _validate_manifest(manifest: dict) -> list[str]:
     errors: list[str] = []
     for key in ("name", "severity", "instructionsFile"):
@@ -77,7 +98,14 @@ def discover_custom_checks(target_root: str | Path) -> list[CustomCheck]:
             print(f"custom_checks: skipping {check_id}: {'; '.join(errors)}", file=sys.stderr)
             continue
 
-        instructions_path = bundle_dir / manifest["instructionsFile"]
+        instructions_path = _resolve_within(bundle_dir, manifest["instructionsFile"])
+        if instructions_path is None:
+            print(
+                f"custom_checks: skipping {check_id}: instructionsFile "
+                f"{manifest['instructionsFile']!r} escapes the bundle directory",
+                file=sys.stderr,
+            )
+            continue
         if not instructions_path.is_file():
             print(
                 f"custom_checks: skipping {check_id}: instructions file "
@@ -88,8 +116,14 @@ def discover_custom_checks(target_root: str | Path) -> list[CustomCheck]:
 
         semgrep_rule_path = None
         if manifest.get("semgrepRule"):
-            candidate = bundle_dir / manifest["semgrepRule"]
-            if candidate.is_file():
+            candidate = _resolve_within(bundle_dir, manifest["semgrepRule"])
+            if candidate is None:
+                print(
+                    f"custom_checks: {check_id}: semgrepRule {manifest['semgrepRule']!r} "
+                    "escapes the bundle directory, ignoring",
+                    file=sys.stderr,
+                )
+            elif candidate.is_file():
                 semgrep_rule_path = candidate
             else:
                 print(

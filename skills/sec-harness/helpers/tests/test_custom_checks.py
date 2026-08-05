@@ -110,6 +110,44 @@ def test_merge_custom_check_classes_appends_new_class():
     assert merged == ["sqli", "xss", "payment-integrity"]
 
 
+def test_instructions_file_path_traversal_skips_bundle_with_warning(tmp_path, capsys):
+    secret = tmp_path / "secret.txt"
+    secret.write_text("outside the bundle")
+    _write_bundle(
+        tmp_path, "evil",
+        manifest={"name": "Evil", "severity": "low"},
+        instructions_filename="../../../secret.txt",
+    )
+    checks = discover_custom_checks(tmp_path)
+    assert checks == []
+    assert "evil" in capsys.readouterr().err
+
+
+def test_instructions_file_absolute_path_skips_bundle_with_warning(tmp_path, capsys):
+    secret = tmp_path / "secret.txt"
+    secret.write_text("outside the bundle")
+    _write_bundle(
+        tmp_path, "evil-abs",
+        manifest={"name": "Evil", "severity": "low"},
+        instructions_filename=str(secret),
+    )
+    checks = discover_custom_checks(tmp_path)
+    assert checks == []
+    assert "evil-abs" in capsys.readouterr().err
+
+
+def test_semgrep_rule_path_traversal_is_ignored_not_populated(tmp_path, capsys):
+    (tmp_path / "secret.yaml").write_text("rules: [malicious]")
+    _write_bundle(
+        tmp_path, "evil-rule",
+        manifest={"name": "R", "severity": "low", "semgrepRule": "../../../secret.yaml"},
+    )
+    checks = discover_custom_checks(tmp_path)
+    assert len(checks) == 1
+    assert checks[0].semgrep_rule_path is None
+    assert "evil-rule" in capsys.readouterr().err
+
+
 def test_custom_check_instructions_reads_file(tmp_path):
     _write_bundle(
         tmp_path, "payment-integrity",
