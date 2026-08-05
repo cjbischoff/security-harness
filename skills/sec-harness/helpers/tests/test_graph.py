@@ -230,6 +230,29 @@ def test_call_edges_respect_word_boundary_and_substrings(tmp_path):
     assert ("both", "foobar") in calls
 
 
+def test_build_tier1_flags_entry_points():
+    graph = g.build_tier1(FIXTURE, sha="deadbeef")
+    widget_node = graph.node("app/api.py:10:get_widget")
+    assert widget_node is not None
+    assert widget_node.attrs["is_entry_point"] is True
+    assert "route" in widget_node.attrs["entry_point_reason"]
+
+
+def test_build_tier1_does_not_flag_internal_helper():
+    graph = g.build_tier1(FIXTURE, sha="deadbeef")
+    db_node = graph.node("app/db.py:1:run_query")
+    assert db_node is not None
+    assert db_node.attrs["is_entry_point"] is False
+    assert "entry_point_reason" not in db_node.attrs
+
+
+def test_entry_point_nodes_returns_only_flagged_nodes():
+    graph = g.build_tier1(FIXTURE, sha="deadbeef")
+    flagged = g.entry_point_nodes(graph)
+    assert all(n.attrs.get("is_entry_point") for n in flagged)
+    assert any(n.id == "app/api.py:10:get_widget" for n in flagged)
+
+
 def test_symbol_at_returns_enclosing_symbol():
     graph = g.build_tier1(FIXTURE, sha="x")
     # handler is defined at app/api.py:4; a line at/after 4 resolves to it
