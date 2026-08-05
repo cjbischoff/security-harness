@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.schema import validate
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "references" / "finding.schema.json"
@@ -66,3 +67,17 @@ def test_unknown_extra_key_is_not_flagged():
     data = json.loads(GOLDEN_PATH.read_text())
     data["some_future_field"] = "value"
     assert validate(data, _schema()) == []
+
+
+def test_default_finding_to_dict_validates_against_schema():
+    f = Finding(
+        id="F-0001",
+        rule_id="test-rule",
+        cls="sqli",
+        status=FindingStatus.RAW,
+        severity=Severity.HIGH,
+        file="a.py",
+        line=1,
+        message="m",
+    )
+    assert validate(f.to_dict(), _schema()) == []
