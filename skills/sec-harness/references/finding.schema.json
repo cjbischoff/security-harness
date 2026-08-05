@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["id", "rule_id", "cls", "status", "severity", "file", "line", "message"],
+  "properties": {
+    "id": {"type": "string"},
+    "rule_id": {"type": "string"},
+    "cls": {"type": "string"},
+    "status": {
+      "type": "string",
+      "enum": [
+        "candidate", "raw", "rejected", "confirmed", "fixed",
+        "duplicate", "stale", "informational", "needs-deployment-testing"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["info", "low", "medium", "high", "critical"]
+    },
+    "file": {"type": "string"},
+    "line": {"type": "integer"},
+    "message": {"type": "string"},
+    "dataflow": {"type": "array", "items": {"type": "string"}},
+    "evidence": {"type": "string"},
+    "evidence_sources": {"type": "array", "items": {"type": "string"}},
+    "risk_score": {"type": ["integer", "number", "null"]},
+    "verification": {"type": ["string", "null"]},
+    "patch_diff": {"type": ["string", "null"]},
+    "discovery_sha": {"type": ["string", "null"]},
+    "duplicate_of": {"type": ["string", "null"]},
+    "history": {"type": "array", "items": {"type": "object"}},
+    "fingerprint": {"type": ["string", "null"]},
+    "priority": {"type": ["string", "null"]},
+    "cvss_vector": {"type": ["string", "null"]},
+    "asvs_ids": {"type": "array", "items": {"type": "string"}},
+    "codeguard_ids": {"type": "array", "items": {"type": "string"}},
+    "completeness_tier": {"type": ["string", "null"]},
+    "runtime_disposition": {"type": ["string", "null"]},
+    "runtime_test": {"type": ["object", "null"]},
+    "preconditions": {"type": "array", "items": {"type": "string"}},
+    "reachability": {"type": ["object", "null"]},
+    "judge_verdict": {"type": ["string", "null"]},
+    "runtime_dependent": {"type": "boolean"}
+  }
+}
