@@ -92,3 +92,20 @@ def test_gate_accepts_needs_deployment_without_receipt(tmp_path):
     f.evidence_sources = ["llm-claimed:reasoning"]   # no mechanical receipt is OK here
     write_findings(ws, [f])
     assert validate_findings(ws) == []
+
+
+def test_schema_violation_is_flagged_with_finding_id(tmp_path):
+    ws = Workspace(tmp_path / "workspace"); ws.ensure()
+    bad = _good().to_dict()
+    bad["severity"] = "not-a-real-severity"
+    (ws.findings_dir / f"{bad['id']}.json").write_text(json.dumps(bad))
+    errs = validate_findings(ws)
+    assert any(bad["id"] in e and "severity" in e for e in errs)
+
+
+def test_schema_valid_finding_produces_no_schema_errors(tmp_path):
+    ws = Workspace(tmp_path / "workspace"); ws.ensure()
+    good = _good().to_dict()
+    (ws.findings_dir / f"{good['id']}.json").write_text(json.dumps(good))
+    errs = validate_findings(ws)
+    assert errs == []

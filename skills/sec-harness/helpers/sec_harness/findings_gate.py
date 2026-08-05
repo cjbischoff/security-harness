@@ -8,7 +8,19 @@ from pathlib import Path
 
 from sec_harness.evidence import is_tool_receipt
 from sec_harness.models import Finding
+from sec_harness.schema import validate as _schema_validate
 from sec_harness.workspace import Workspace
+
+_FINDING_SCHEMA_PATH = Path(__file__).resolve().parents[2] / "references" / "finding.schema.json"
+
+
+def _load_finding_schema() -> dict:
+    """Load the finding JSON schema.
+
+    Returns:
+        The parsed ``finding.schema.json`` contents.
+    """
+    return json.loads(_FINDING_SCHEMA_PATH.read_text())
 
 
 def validate_findings(ws: Workspace) -> list[str]:
@@ -31,6 +43,7 @@ def validate_findings(ws: Workspace) -> list[str]:
         except (ValueError, TypeError, KeyError) as exc:
             errors.append(f"{p.stem}: unparseable finding ({exc})")
             continue
+        errors.extend(f"{p.stem}: {e}" for e in _schema_validate(data, _load_finding_schema()))
         if not f.file:
             errors.append(f"{f.id}: empty file")
         if f.line < 1:
