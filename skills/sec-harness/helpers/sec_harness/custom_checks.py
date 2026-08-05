@@ -11,16 +11,27 @@ not run them.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 _VALID_SEVERITIES = {"info", "low", "medium", "high", "critical"}
+_VALID_CHECK_ID = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
 @dataclass
 class CustomCheck:
-    """One discovered custom check bundle."""
+    """One discovered custom check bundle.
+
+    ``applicable_paths``/``excluded_paths`` are read verbatim from the manifest and are
+    not currently consumed by anything in this module or ``SKILL.md``'s orchestration —
+    no code scopes investigation to/away from these paths yet. They are untrusted,
+    manifest-supplied strings (same threat model as ``instructionsFile``/``semgrepRule``):
+    a future consumer that turns them into filesystem globs or semgrep ``--include``
+    arguments MUST route them through a containment check like ``_resolve_within``
+    first, not use them as raw path fragments.
+    """
 
     check_id: str
     name: str
@@ -83,6 +94,13 @@ def discover_custom_checks(target_root: str | Path) -> list[CustomCheck]:
     out: list[CustomCheck] = []
     for bundle_dir in sorted(p for p in checks_dir.iterdir() if p.is_dir()):
         check_id = bundle_dir.name
+        if not _VALID_CHECK_ID.match(check_id):
+            print(
+                f"custom_checks: skipping bundle with unsafe check_id {check_id!r} "
+                f"(must match {_VALID_CHECK_ID.pattern!r})",
+                file=sys.stderr,
+            )
+            continue
         manifest_path = bundle_dir / f"{check_id}.json"
         if not manifest_path.is_file():
             print(f"custom_checks: skipping {check_id}: missing {manifest_path.name}", file=sys.stderr)
