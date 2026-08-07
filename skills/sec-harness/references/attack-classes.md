@@ -10,6 +10,7 @@ Use these exact keys (lowercase) in `scan-profile.json`.
 | `cmdi` | OS command injection | `subprocess`, `os.system`, `exec(`, `child_process`, backticks (note: `exec(` substring-matches PHP `curl_exec(`/`mysqli_*_exec` — anchor with word boundary `\bexec\(` or `\bshell_exec\(` to avoid HTTP/DB false hits) | static only |
 | `ssrf` | Server-side request forgery | `requests.get(`, `urlopen`, `fetch(`, `axios`, user-controlled URL | static only |
 | `path-traversal` | Path traversal / file read-write | `open(`, `join(`, `../`, `send_file`, `readFile` | static only |
+| `fileupload` | Insecure file upload | `multer`, `request.FILES`, `req.files`, `MultipartFile`, `move_uploaded_file`, `FormFile`, extension/content-type checks on upload path | static only |
 | `authz` | Broken access control (BOLA/BFLA) | route handlers, `current_user`, missing role checks, IDs in path | static only |
 | `authn` | Authentication flaws | `login`, `session`, `jwt`, `password`, token verification | static only |
 | `deserialization` | Unsafe deserialization | `pickle`, `yaml.load`, `Marshal`, `readObject`, `eval(` | static only |
@@ -46,6 +47,29 @@ evaluator's own call/apply mechanism, not `eval()` or a template engine.
   `file:line`), which counts as a mechanical receipt.
 - `agents_to_spawn` mirrors `attack_surface` MINUS `deps` (SCA covers deps).
 - Everything is static-only: this harness never executes the target.
+- **File upload** (`fileupload`): select when any upload-handling call is present
+  (`multer`, `request.FILES`/`req.files`, `MultipartFile`, `move_uploaded_file`,
+  `FormFile`, `IFormFile`). Trace guidance (no dedicated hunting doc needed — this is
+  a flat checklist, not a class needing deep companion knowledge like JWT/OAuth):
+  - **Vulnerable indicators**: no extension check; Content-Type/MIME-header-only
+    validation (fully attacker-controlled — never a security control); extension
+    blocklist missing known gaps (PHP: `.php3/.php4/.php5/.phtml/.phar/.shtml`; Java:
+    `.jsp/.jspx/.jsw/.jsv`; ASP.NET: `.asp/.aspx/.ashx/.asmx/.cer/.asa`);
+    case-sensitivity bypass (blocklist compared without `.lower()`/equivalent);
+    double-extension (`shell.php.jpg`) combined with a server config that executes
+    on the leftmost recognized extension; unsanitized original filename used
+    directly in the storage path.
+  - **Mitigating patterns**: allowlist of safe extensions applied case-insensitively;
+    magic-byte/content validation as defense-in-depth; filename sanitization via a
+    trusted library (`secure_filename`, `path.basename`, `Path.GetFileName`,
+    `filepath.Base`); storage outside the web root; server-generated rename (UUID)
+    so the served extension is server-controlled; serving through a controlled
+    download endpoint with `Content-Disposition: attachment`.
+  - **FP trap**: an allowlist alone does not clear the finding if the storage
+    directory is still web-executable, the comparison is case-sensitive, or the
+    extension is extracted from the wrong segment of a double-extension filename —
+    the allowlist must be checked against the extension that will actually be
+    served/executed, not just list membership.
 
 ## Domain-specific classes & companion knowledge (F2)
 
@@ -62,11 +86,15 @@ relevant companions by detected frameworks/target type and records them in
 | `hunting/client-side.md` | `dom-xss`, `dom-clobbering`, `cswsh`, `prototype-pollution`, `open-redirect-client` |
 | `hunting/ai-agent.md` | `excessive-agency`, `denial-of-wallet`, `mcp-trust-inheritance`, `context-bleed`, `prompt-injection` |
 | `hunting/business-logic.md` | `business-logic`, `feature-abuse`, `chained` |
+| `hunting/graphql-injection.md` | `graphql` |
 | `hunting/memory-native.md` | `spatial-oob`, `temporal-uaf`, `type-confusion` (only when native/unsafe code is present) |
 
 Selection guidance: choose a companion when its frameworks/indicators appear (JWT/OAuth/
 SAML libs → web-protocol-auth; browser/DOM/React → client-side; LangChain/LangGraph/MCP →
-ai-agent; always consider business-logic; memory-native only for C/C++/unsafe). Companion
+ai-agent; always consider business-logic; memory-native only for C/C++/unsafe; GraphQL
+libraries (`graphql`, `apollo-server`, `graphql-yoga`, `@nestjs/graphql`, `graphene`,
+`strawberry-graphql`, `gqlgen`, `async-graphql`) or a `.graphql`/`.graphqls` schema file
+→ graphql-injection). Companion
 classes flow through `agents_to_spawn` + `clsmap` exactly like universal ones.
 
 ## Class disambiguation (cross-class boundary discipline)
@@ -82,6 +110,7 @@ force-fitting it into whichever agent happened to find it:
 | `ssti` vs `deserialization`/`cmdi` | SSTI's sink is a template engine's own render call, not `eval()`/`pickle.loads()`/`exec()` — those are `deserialization`/`cmdi` even if the exploit chain ultimately achieves code execution through a template engine's escape hatch. |
 | `xxe` vs `deserialization` | XXE is specifically an XML parser expanding external entities (DTD/`SYSTEM`); a non-XML deserializer (pickle, YAML, Java `readObject`) is `deserialization` even though both can reach file-read/RCE. |
 | `path-traversal` vs `resource` | Impact is arbitrary file read/write outside the intended root → `path-traversal`. Impact is exhaustion from unbounded size/count with no traversal → `resource`. |
+| `fileupload` vs `path-traversal` | A traversal-in-filename bug (`../../webroot/shell.php` used unsanitized in the storage path) reuses `path-traversal`'s classic pattern in an upload context. Route to `fileupload` when the finding is about WHAT gets stored/executed (extension/content-type bypass enabling a webshell); route to `path-traversal` when the finding is purely about WHERE the write lands outside the intended root, with no execution angle. |
 | `open-redirect` vs `ssrf` | The tainted URL is only ever handed to the BROWSER (a `Location`/redirect response) with no server-side fetch → `open-redirect`. The SERVER itself dereferences the URL → `ssrf`. |
 | `webhook-verification` vs `crypto` | Missing/broken signature check on a specific inbound webhook route → `webhook-verification`. A weak algorithm/key source used more generally (not gating a webhook) → `crypto`. |
 | `expr-eval-rce` vs `deserialization`/`ssti` | The sink is a custom expression/rule-engine's own call/apply mechanism (`jsep`, `expr-eval`, `mathjs`, a bespoke formula engine) — not a language-level deserializer or a template engine's render call. |
