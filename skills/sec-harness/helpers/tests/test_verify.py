@@ -83,6 +83,15 @@ def test_verify_findings_skips_findings_without_patch(tmp_path):
     assert n == 0  # no patch_diff -> not verified
 
 
+def test_verify_findings_records_stage(tmp_path):
+    from sec_harness.state import load_state
+
+    ws = Workspace(tmp_path / "workspace"); ws.ensure()
+    write_findings(ws, [_confirmed("F-0002", "sqli")])
+    verify_findings(ws, "t", "c", verifier=lambda *a, **k: "verified-static")
+    assert "verify" in load_state(ws).stages
+
+
 def test_codeql_finding_routes_to_codeql_rerun(monkeypatch):
     import sec_harness.verify as V
     calls = []

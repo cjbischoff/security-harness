@@ -179,6 +179,15 @@ def test_calibrate_promotes_runtime_dependent_before_scoring(tmp_path):
     assert by["A"] is FindingStatus.NEEDS_DEPLOYMENT_TESTING
 
 
+def test_calibrate_findings_records_stage(tmp_path):
+    from sec_harness.state import load_state
+
+    ws = Workspace(tmp_path / "workspace"); ws.ensure()
+    write_findings(ws, [_f("F-1", "sqli", Severity.HIGH, ["a", "b"])])
+    calibrate_findings(ws)
+    assert "calibrate" in load_state(ws).stages
+
+
 def test_malformed_cvss_does_not_crash_batch(tmp_path):
     # O-029: one finding with an invalid metric must NOT zero the others; it falls back to heuristic.
     ws = Workspace(tmp_path / "ws"); ws.ensure()

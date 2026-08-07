@@ -41,3 +41,12 @@ def test_run_postflight_merges_and_drifts(tmp_path):
     data = json.loads(prior_context_path(ws).read_text())
     wheres = [i["where"].split(":")[0] for i in data["items"]]
     assert "keep.py" in wheres and "changed.py" not in wheres
+
+
+def test_run_postflight_records_stage(tmp_path):
+    from sec_harness.state import load_state
+
+    ws = Workspace(tmp_path); ws.ensure()
+    write_findings(ws, [_f("A", FindingStatus.CONFIRMED)])
+    run_postflight(ws, "sha1")
+    assert "postflight" in load_state(ws).stages

@@ -7,9 +7,11 @@ import json
 from collections import Counter
 
 from sec_harness import cost
+from sec_harness.campaign import record_stage
 from sec_harness.coverage_ledger import render_markdown as render_coverage_ledger
 from sec_harness.evidence import is_tool_receipt
 from sec_harness.models import Finding, FindingStatus
+from sec_harness.patch_status import PatchStatus, check_patch_applied, not_applied_caution
 from sec_harness.sarif import to_sarif
 from sec_harness.state import load_state
 from sec_harness.workspace import Workspace, load_paths, read_findings
@@ -20,7 +22,7 @@ _REPORTABLE = {FindingStatus.CONFIRMED, FindingStatus.FIXED}
 _FULL_TIERS = {"critical", "high"}
 
 
-def render_finding(f: Finding) -> str:
+def render_finding(f: Finding, patch_status: PatchStatus | None = None) -> str:
     """Render one finding as the verified-finding template (references/finding-template.md).
 
     Populated entirely from the Finding JSON fields so the prose never drifts from
@@ -30,6 +32,11 @@ def render_finding(f: Finding) -> str:
 
     Args:
         f: The finding to render.
+        patch_status: Result of :func:`patch_status.check_patch_applied` for this finding's
+            ``patch_diff`` against the real target, if a target was supplied to
+            :func:`write_report`. A ``fixed`` finding not confirmed applied gets a caution
+            note — ``verify.py`` only checks a patch against a throwaway copy, never the
+            real target.
 
     Returns:
         A Markdown section string for the finding.
@@ -44,6 +51,10 @@ def render_finding(f: Finding) -> str:
     full = f.severity.value in _FULL_TIERS
 
     out = [f"### {f.id} — {f.cls} — {f.severity.value.title()}", ""]
+    if f.status is FindingStatus.FIXED and patch_status is not None:
+        caution = not_applied_caution(patch_status)
+        if caution:
+            out += [caution, ""]
     # §1 Summary
     out += [f"**1. Summary.** {f.message}  \nLocation: `{f.file}:{f.line}`.", ""]
     if f.asvs_ids or f.codeguard_ids:
@@ -95,7 +106,8 @@ def render_finding(f: Finding) -> str:
 def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = None,
                 needs_deployment: list[Finding] | None = None,
                 coverage: dict | None = None, coverage_ledger: dict | None = None,
-                has_redteam_plan: bool = False) -> str:
+                has_redteam_plan: bool = False,
+                patch_statuses: dict[str, PatchStatus] | None = None) -> str:
     """Render findings and optional token accounting as Markdown.
 
     The findings table includes Risk (calibrated 1-10 score) and Verification
@@ -112,6 +124,8 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
             when given, appends a "Coverage completeness" section. Omitted when ``None``.
         has_redteam_plan: True when ``redteam-plan.md`` exists in the reports dir; adds a
             "Manual runtime testing" section pointing the engineer at it (O-022).
+        patch_statuses: Optional ``finding.id`` → :class:`PatchStatus`, from
+            :func:`check_patch_applied` against the real target, for ``fixed`` findings.
 
     Returns:
         A Markdown report string.
@@ -133,7 +147,8 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
     if ordered:
         lines += ["", "## Detailed findings", ""]
         for f in ordered:
-            lines += [render_finding(f), "---", ""]
+            lines += [render_finding(f, patch_status=(patch_statuses or {}).get(f.id)),
+                      "---", ""]
     if needs_deployment:
         # F9: real-but-unprovable-from-source — reported separately, NOT confirmed,
         # NOT a false positive. Never fudge these into the confirmed count/severity.
@@ -190,7 +205,7 @@ def select_reportable(findings: list[Finding]) -> list[Finding]:
     return sorted(reportable, key=lambda f: (-(f.risk_score or 0), f.id))
 
 
-def write_report(ws: Workspace) -> dict:
+def write_report(ws: Workspace, *, target: str | None = None) -> dict:
     """Assemble the final SARIF + Markdown report from a workspace's findings.
 
     Overwrites ``report.sarif``, ``report.md``, and ``findings.json`` so they
@@ -199,6 +214,9 @@ def write_report(ws: Workspace) -> dict:
 
     Args:
         ws: Workspace to read findings from and write reports into.
+        target: Path to the real target repo. When given, ``fixed`` findings are mechanically
+            checked (``git apply --check``) against the real working tree so the report never
+            implies a still-vulnerable finding's patch is deployed.
 
     Returns:
         ``{"reported": <count>, "sarif": <path>, "report": <path>}``.
@@ -212,12 +230,20 @@ def write_report(ws: Workspace) -> dict:
     coverage_ledger = json.loads(cl_path.read_text()) if cl_path.exists() else None
     has_redteam_plan = (ws.reports / "redteam-plan.md").exists()
     token_spend = cost.aggregate_by_phase(load_state(ws)) or None
+    patch_statuses = None
+    if target:
+        patch_statuses = {
+            f.id: check_patch_applied(target, f.patch_diff)
+            for f in reportable if f.status is FindingStatus.FIXED and f.patch_diff
+        }
     ws.sarif_path.write_text(json.dumps(to_sarif(reportable), indent=2))
     ws.report_path.write_text(to_markdown(reportable, token_spend=token_spend, needs_deployment=ndt,
                                           coverage=coverage,
                                           coverage_ledger=coverage_ledger,
-                                          has_redteam_plan=has_redteam_plan))
+                                          has_redteam_plan=has_redteam_plan,
+                                          patch_statuses=patch_statuses))
     ws.findings_json_path.write_text(json.dumps([f.to_dict() for f in reportable], indent=2))
+    record_stage(ws, "report")
     return {"reported": len(reportable), "sarif": str(ws.sarif_path), "report": str(ws.report_path)}
 
 
@@ -236,11 +262,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--findings-dir", default=None)
     parser.add_argument("--kb-dir", default=None)
     parser.add_argument("--paths-config", default=None)
+    parser.add_argument("--target", default=None)
     args = parser.parse_args(argv)
     ws = load_paths(workspace=args.workspace, paths_config=args.paths_config,
                     reports_dir=args.reports_dir, findings_dir=args.findings_dir,
                     kb_dir=args.kb_dir)
-    result = write_report(ws)
+    result = write_report(ws, target=args.target)
     print(f"reported {result['reported']}")
     return 0
 

@@ -16,8 +16,10 @@ from __future__ import annotations
 import argparse
 import json
 
+from sec_harness.campaign import record_stage
 from sec_harness.evidence import is_tool_receipt
 from sec_harness.models import Finding, FindingStatus, Severity
+from sec_harness.patch_status import PatchStatus, check_patch_applied, not_applied_caution
 from sec_harness.phase_gate import GateDecision, build_gate_record, write_gate_record
 from sec_harness.workspace import Workspace, load_paths, read_findings
 
@@ -91,15 +93,29 @@ def discriminate(findings: list[Finding], min_risk: int = DEFAULT_MIN_RISK) -> d
     }
 
 
-def _directive_block(f: Finding) -> str:
-    """Render one manual runtime-test directive from a finding's ``runtime_test`` block."""
+def _directive_block(f: Finding, patch_status: PatchStatus | None = None) -> str:
+    """Render one manual runtime-test directive from a finding's ``runtime_test`` block.
+
+    Args:
+        f: The finding to render a directive for.
+        patch_status: Result of :func:`patch_status.check_patch_applied` for this finding's
+            ``patch_diff`` against the real target, if a target was supplied to
+            :func:`write_plan`. A deterministic backstop against the producer agent framing a
+            still-vulnerable finding's ``runtime_test`` as if the deployed fix were live.
+    """
     rt = f.runtime_test or {}
     receipts = [s for s in f.evidence_sources if is_tool_receipt(s)]
     payloads = rt.get("payloads") or []
     payload_md = "\n".join(f"  - `{p}`" for p in payloads) if payloads else "  - _(none supplied)_"
-    return "\n".join([
+    lines = [
         f"### {f.id} — {f.cls} — risk {f.risk_score if f.risk_score is not None else '-'}",
         "",
+    ]
+    if f.status is FindingStatus.FIXED and patch_status is not None:
+        caution = not_applied_caution(patch_status)
+        if caution:
+            lines += [caution, ""]
+    lines += [
         f"- **Objective:** {rt.get('objective', f.message)}",
         f"- **Preconditions / access:** {rt.get('preconditions', '_not specified_')}",
         "- **Payload(s)** (shell vars only — export before use):",
@@ -109,11 +125,23 @@ def _directive_block(f: Finding) -> str:
         f"- **Static evidence:** `{f.file}:{f.line}` — "
         + (", ".join(f"`{r}`" for r in receipts) or "_no tool receipt (verify carefully)_"),
         "",
-    ])
+    ]
+    return "\n".join(lines)
 
 
-def render_plan(disc: dict, min_risk: int = DEFAULT_MIN_RISK) -> str:
-    """Render the manual runtime test plan as Markdown from a :func:`discriminate` result."""
+def render_plan(
+    disc: dict, min_risk: int = DEFAULT_MIN_RISK,
+    patch_statuses: dict[str, PatchStatus] | None = None,
+) -> str:
+    """Render the manual runtime test plan as Markdown from a :func:`discriminate` result.
+
+    Args:
+        disc: Output of :func:`discriminate`.
+        min_risk: Confidence bar for inclusion in the manual plan (used only in the header text).
+        patch_statuses: Optional ``finding.id`` → :class:`PatchStatus`, from
+            :func:`check_patch_applied` against the real target, for ``fixed`` findings —
+            rendered as a caution on the affected directive block.
+    """
     plan = disc["needs_runtime"]
     below = disc["below_bar"]
     settled = disc["static_settled"]
@@ -143,7 +171,8 @@ def render_plan(disc: dict, min_risk: int = DEFAULT_MIN_RISK) -> str:
                                ("Verification-incomplete", incomplete)):
             out.append(f"### {heading}")
             out.append("")
-            out += [_directive_block(f) for f in group] if group else ["_none_", ""]
+            out += [_directive_block(f, patch_status=(patch_statuses or {}).get(f.id))
+                    for f in group] if group else ["_none_", ""]
     else:
         out += ["_No confirmed finding requires runtime validation at or above the bar._", ""]
     out += ["## Runtime-validation gaps", "",
@@ -183,21 +212,44 @@ def build_redteam_gate_record(findings: list[Finding], verdicts: dict[str, str] 
     return build_gate_record("redteam", decisions, verdicts)
 
 
-def write_plan(ws: Workspace, min_risk: int = DEFAULT_MIN_RISK) -> dict:
+def _fixed_patch_statuses(findings: list[Finding], target: str) -> dict[str, PatchStatus]:
+    """Check real-target patch-application state for every ``fixed`` finding with a patch_diff.
+
+    Args:
+        findings: Findings to check (only ``FIXED`` ones with a non-empty ``patch_diff`` count).
+        target: Path to the real target repo's working tree.
+
+    Returns:
+        ``finding.id`` → :class:`PatchStatus`, one entry per checked finding.
+    """
+    statuses: dict[str, PatchStatus] = {}
+    for f in findings:
+        if f.status is FindingStatus.FIXED and f.patch_diff:
+            statuses[f.id] = check_patch_applied(target, f.patch_diff)
+    return statuses
+
+
+def write_plan(ws: Workspace, min_risk: int = DEFAULT_MIN_RISK, *, target: str | None = None) -> dict:
     """Discriminate the workspace's findings and write ``redteam-plan.md``.
 
     Args:
         ws: Workspace to read findings from and write the plan into.
         min_risk: Confidence bar for inclusion in the manual plan.
+        target: Path to the real target repo. When given, ``fixed`` findings are mechanically
+            checked (``git apply --check``) against the real working tree so a runtime-test
+            directive never gets framed as if a still-vulnerable fix were deployed.
 
     Returns:
         ``{"plan": <path>, "needs_runtime": n, "below_bar": m, "static_settled": k}``.
     """
-    disc = discriminate(read_findings(ws), min_risk)
+    findings = read_findings(ws)
+    disc = discriminate(findings, min_risk)
+    patch_statuses = _fixed_patch_statuses(findings, target) if target else None
     ws.reports.mkdir(parents=True, exist_ok=True)
     path = ws.reports / "redteam-plan.md"
-    path.write_text(render_plan(disc, min_risk))
+    path.write_text(render_plan(disc, min_risk, patch_statuses=patch_statuses))
     write_gate_record(ws, "redteam", build_redteam_gate_record(disc["needs_runtime"]))
+    record_stage(ws, "redteam")
     return {
         "plan": str(path),
         "needs_runtime": len(disc["needs_runtime"]),
@@ -215,11 +267,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--kb-dir", default=None)
     ap.add_argument("--paths-config", default=None)
     ap.add_argument("--min-risk", type=int, default=DEFAULT_MIN_RISK)
+    ap.add_argument("--target", default=None)
     args = ap.parse_args(argv)
     ws = load_paths(workspace=args.workspace, paths_config=args.paths_config,
                     reports_dir=args.reports_dir, findings_dir=args.findings_dir,
                     kb_dir=args.kb_dir)
-    result = write_plan(ws, args.min_risk)
+    result = write_plan(ws, args.min_risk, target=args.target)
     print(json.dumps(result))
     return 0
 
