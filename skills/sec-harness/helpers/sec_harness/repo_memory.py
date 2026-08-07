@@ -65,18 +65,19 @@ def memory_root(target: str | Path | None = None) -> Path:
 
 
 def repo_slug(target: str | Path, *, runner=subprocess.run) -> str:
-    """Derive a stable, filesystem-safe slug identifying a target repo.
+    """Derive a stable, filesystem-safe slug identifying a scan target.
 
-    Prefers the git ``origin`` remote URL (stable across clone locations); falls back
-    to the absolute path. A short hash of the identity is appended so two repos with
-    the same basename never collide.
+    Prefers the git ``origin`` remote URL (stable across clone locations); falls back to the
+    absolute path. For a monorepo sub-service the identity also includes the target's path
+    relative to the git top-level, so two sub-services of one repo never collide. A short
+    hash of the identity is appended.
 
     Args:
-        target: Path to the target repo.
+        target: Path to the scan target.
         runner: Injectable subprocess runner (for testing).
 
     Returns:
-        A slug like ``myrepo-1a2b3c4d``.
+        A slug like ``svca-1a2b3c4d`` (monorepo sub-service) or ``myrepo-1a2b3c4d``.
     """
     target = Path(target)
     identity = str(target.resolve())
@@ -86,9 +87,19 @@ def repo_slug(target: str | Path, *, runner=subprocess.run) -> str:
                      capture_output=True, text=True, check=False)
         url = (res.stdout or "").strip()
         if res.returncode == 0 and url:
-            identity = url
-            # basename of the remote, minus .git
-            name = re.sub(r"\.git$", "", url.rstrip("/").rsplit("/", 1)[-1]) or name
+            top = runner(["git", "-C", str(target), "rev-parse", "--show-toplevel"],
+                         capture_output=True, text=True, check=False)
+            toplevel = (top.stdout or "").strip()
+            subpath = ""
+            if top.returncode == 0 and toplevel:
+                try:
+                    subpath = target.resolve().relative_to(Path(toplevel).resolve()).as_posix()
+                except ValueError:
+                    subpath = ""
+            identity = url + ("#" + subpath if subpath and subpath != "." else "")
+            base_src = subpath.rsplit("/", 1)[-1] if subpath and subpath != "." else \
+                re.sub(r"\.git$", "", url.rstrip("/").rsplit("/", 1)[-1])
+            name = base_src or name
     except OSError:
         pass
     base = _SLUG_RE.sub("-", name.lower()).strip("-") or "repo"
