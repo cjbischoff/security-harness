@@ -123,7 +123,7 @@ def discover_context_files(repo_root: str | Path, scan_scope: str = ".") -> list
         svc = Path(scan_scope).name
         for base in (f"docs/services/{svc}", f"docs/global-services/{svc}", f"docs/{svc}"):
             for p in (root / base).glob("**/*.md"):
-                if p.is_file():
+                if p.is_file() and not any(s in p.parts for s in _SKIP):
                     found.add(p.relative_to(root).as_posix())
     return sorted(found)[:_MAX_FILES]
 

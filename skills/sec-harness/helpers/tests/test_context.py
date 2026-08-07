@@ -26,9 +26,16 @@ def test_finds_monorepo_root_service_docs_from_subdir(tmp_path: Path):
     svc_docs = repo / "docs" / "services" / "svc"
     svc_docs.mkdir(parents=True)
     (svc_docs / "data-flow.md").write_text("# data flow")
+    # _SKIP must apply to both new scan_scope sub-tree and canonical service-doc dirs
+    (repo / "internal" / "svc" / "node_modules").mkdir(parents=True)
+    (repo / "internal" / "svc" / "node_modules" / "evil.md").write_text("no")
+    (svc_docs / "dist").mkdir()
+    (svc_docs / "dist" / "skip.md").write_text("no")
     found = discover_context_files(repo, "internal/svc")
     assert "internal/svc/README.md" in found
     assert "docs/services/svc/data-flow.md" in found  # was MISSED before
+    assert not any("node_modules" in f for f in found)
+    assert not any("dist" in f for f in found)
 
 
 def test_ingests_puml_text_diagrams(tmp_path: Path):
