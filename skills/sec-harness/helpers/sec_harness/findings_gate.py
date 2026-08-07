@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from sec_harness.campaign import record_stage
 from sec_harness.evidence import is_tool_receipt
 from sec_harness.models import Finding
 from sec_harness.schema import validate as _schema_validate
@@ -69,6 +70,7 @@ def validate_findings(ws: Workspace) -> list[str]:
                 f"llm-claimed evidence alone; ground the sink with semgrep/codeql/"
                 f"ast-grep/ripgrep"
             )
+    record_stage(ws, "findings-gate")
     return errors
 
 

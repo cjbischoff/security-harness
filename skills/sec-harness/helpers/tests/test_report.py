@@ -1,7 +1,8 @@
 """Tests for Markdown reporting."""
 
 from sec_harness.models import Finding, FindingStatus, Severity
-from sec_harness.report import select_reportable, to_markdown, write_report
+from sec_harness.patch_status import PatchStatus
+from sec_harness.report import render_finding, select_reportable, to_markdown, write_report
 from sec_harness.workspace import Workspace, write_findings
 
 
@@ -177,6 +178,55 @@ def test_to_markdown_renders_coverage_ledger():
            "deferred": ["liquid templates"]}
     md = to_markdown([], coverage_ledger=led)
     assert "Coverage completeness" in md and "liquid templates" in md
+
+
+def test_write_report_records_stage(tmp_path):
+    from sec_harness.state import load_state
+
+    ws = Workspace(tmp_path / "workspace"); ws.ensure()
+    write_findings(ws, [_rf("F-0002", FindingStatus.FIXED, risk=9, verification="verified-static")])
+    write_report(ws)
+    assert "report" in load_state(ws).stages
+
+
+def _fixed_with_patch(fid, patch_diff="--- a/x\n+++ b/x\n"):
+    return Finding(id=fid, rule_id="r", cls="sqli", status=FindingStatus.FIXED,
+                   severity=Severity.HIGH, file="app.py", line=18, message="m",
+                   patch_diff=patch_diff, risk_score=9)
+
+
+def test_render_finding_shows_caution_when_patch_not_applied():
+    md = render_finding(_fixed_with_patch("F-1"), patch_status=PatchStatus.NOT_APPLIED)
+    assert "Caution" in md and "NOT been confirmed applied" in md
+
+
+def test_render_finding_omits_caution_when_patch_applied():
+    md = render_finding(_fixed_with_patch("F-1"), patch_status=PatchStatus.APPLIED)
+    assert "Caution" not in md
+
+
+def test_render_finding_omits_caution_when_patch_status_not_given():
+    md = render_finding(_fixed_with_patch("F-1"))
+    assert "Caution" not in md
+
+
+def test_write_report_with_target_annotates_caution(monkeypatch, tmp_path):
+    import sec_harness.report as Rp
+
+    monkeypatch.setattr(Rp, "check_patch_applied", lambda target, diff: PatchStatus.NOT_APPLIED)
+    ws = Workspace(tmp_path / "workspace"); ws.ensure()
+    write_findings(ws, [_fixed_with_patch("F-1")])
+    write_report(ws, target="/tgt")
+    md = ws.report_path.read_text()
+    assert "Caution" in md
+
+
+def test_write_report_without_target_skips_patch_check(tmp_path):
+    ws = Workspace(tmp_path / "workspace"); ws.ensure()
+    write_findings(ws, [_fixed_with_patch("F-1")])
+    write_report(ws)
+    md = ws.report_path.read_text()
+    assert "Caution" not in md
 
 
 def test_write_report_renders_token_spend(tmp_path):

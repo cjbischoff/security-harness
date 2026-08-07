@@ -46,6 +46,7 @@ def _copy_ignore(directory: str, names: list[str]) -> set[str]:
             skip.add(n)
     return skip
 
+from sec_harness.campaign import record_stage
 from sec_harness.codeql import CodeQLError, run_codeql
 from sec_harness.models import FindingStatus
 from sec_harness.sast import run_semgrep
@@ -274,6 +275,7 @@ def verify_findings(
             fixed += 1
     if changed:
         write_findings(ws, findings)
+    record_stage(ws, "verify")
     return fixed
 
 

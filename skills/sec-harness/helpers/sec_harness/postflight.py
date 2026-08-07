@@ -14,6 +14,7 @@ import argparse
 import json
 from pathlib import Path
 
+from sec_harness.campaign import record_stage
 from sec_harness.context import Context, ContextItem, prior_context_path
 from sec_harness.models import Finding, FindingStatus
 from sec_harness.workspace import Workspace, read_findings
@@ -90,6 +91,7 @@ def run_postflight(ws: Workspace, sha: str | None, *, changed_files: set[str] | 
     merged = _merge(old, new, changed_files or set())
     ws.kb.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(merged.to_dict(), indent=2))
+    record_stage(ws, "postflight")
     return len(merged.items)
 
 

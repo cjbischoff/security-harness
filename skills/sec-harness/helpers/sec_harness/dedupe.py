@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from sec_harness.campaign import record_stage
 from sec_harness.fingerprint import fingerprint
 from sec_harness.graph import load_graph, symbol_at
 from sec_harness.models import Finding, FindingStatus
@@ -93,6 +94,7 @@ def dedupe_findings(ws: Workspace) -> int:
 
     if marked or stamped:
         write_findings(ws, findings)
+    record_stage(ws, "dedupe")
     return marked
 
 

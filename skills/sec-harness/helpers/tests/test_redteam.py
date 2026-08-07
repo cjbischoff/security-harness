@@ -1,9 +1,11 @@
 """Tests for the red-team static->runtime bridge phase."""
 
 from sec_harness.models import Finding, FindingStatus, Severity
+from sec_harness.patch_status import PatchStatus
 from sec_harness.phase_gate import write_gate_record
 from sec_harness.redteam import (
     _above_bar,
+    _fixed_patch_statuses,
     build_redteam_gate_record,
     discriminate,
     render_plan,
@@ -75,6 +77,68 @@ def test_write_plan(tmp_path):
     result = write_plan(ws, min_risk=7)
     assert result["needs_runtime"] == 1
     assert (ws.reports / "redteam-plan.md").exists()
+
+
+def test_write_plan_records_stage(tmp_path):
+    from sec_harness.state import load_state
+
+    ws = Workspace(tmp_path); ws.ensure()
+    write_findings(ws, [_f("A", disposition="needs-runtime", risk=9)])
+    write_plan(ws, min_risk=7)
+    assert "redteam" in load_state(ws).stages
+
+
+def _fixed(fid, patch_diff="--- a/x\n+++ b/x\n"):
+    return Finding(id=fid, rule_id="r", cls="sqli", status=FindingStatus.FIXED,
+                   severity=Severity.HIGH, file="app/x.py", line=10, message="m",
+                   patch_diff=patch_diff, evidence_sources=["semgrep:rule"])
+
+
+def test_fixed_patch_statuses_only_checks_fixed_with_patch(monkeypatch):
+    import sec_harness.redteam as R
+
+    monkeypatch.setattr(R, "check_patch_applied", lambda target, diff: PatchStatus.APPLIED)
+    confirmed = _f("B", disposition="static-settled")  # not FIXED -> skipped
+    no_patch = _fixed("C", patch_diff="")               # FIXED but no patch -> skipped
+    fixed = _fixed("D")
+    out = _fixed_patch_statuses([confirmed, no_patch, fixed], "/tgt")
+    assert out == {"D": PatchStatus.APPLIED}
+
+
+def test_render_plan_shows_caution_for_not_applied_fixed_finding():
+    rt = {"objective": "confirm sqli patched", "payloads": ["curl $HOST"]}
+    f = _fixed("D")
+    f.runtime_test = rt
+    f.risk_score = 9
+    f.runtime_disposition = "needs-runtime"
+    d = discriminate([f], min_risk=7)
+    md = render_plan(d, min_risk=7, patch_statuses={"D": PatchStatus.NOT_APPLIED})
+    assert "Caution" in md and "NOT been confirmed applied" in md
+
+
+def test_render_plan_omits_caution_for_applied_fixed_finding():
+    f = _fixed("D")
+    f.runtime_test = {"objective": "confirm sqli patched"}
+    f.risk_score = 9
+    f.runtime_disposition = "needs-runtime"
+    d = discriminate([f], min_risk=7)
+    md = render_plan(d, min_risk=7, patch_statuses={"D": PatchStatus.APPLIED})
+    assert "Caution" not in md
+
+
+def test_write_plan_with_target_annotates_caution(monkeypatch, tmp_path):
+    import sec_harness.redteam as R
+
+    monkeypatch.setattr(R, "check_patch_applied", lambda target, diff: PatchStatus.NOT_APPLIED)
+    ws = Workspace(tmp_path); ws.ensure()
+    f = _fixed("D")
+    f.runtime_test = {"objective": "confirm sqli patched"}
+    f.risk_score = 9
+    f.runtime_disposition = "needs-runtime"
+    write_findings(ws, [f])
+    write_plan(ws, min_risk=7, target="/tgt")
+    md = (ws.reports / "redteam-plan.md").read_text()
+    assert "Caution" in md
 
 
 def _rt(id_, sev, risk, disp="needs-runtime", status=None, evidence_sources=None):

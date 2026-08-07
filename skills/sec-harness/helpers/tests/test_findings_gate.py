@@ -109,3 +109,12 @@ def test_schema_valid_finding_produces_no_schema_errors(tmp_path):
     (ws.findings_dir / f"{good['id']}.json").write_text(json.dumps(good))
     errs = validate_findings(ws)
     assert errs == []
+
+
+def test_validate_findings_records_stage(tmp_path):
+    from sec_harness.state import load_state
+
+    ws = Workspace(tmp_path / "workspace"); ws.ensure()
+    write_findings(ws, [_good()])
+    validate_findings(ws)
+    assert "findings-gate" in load_state(ws).stages

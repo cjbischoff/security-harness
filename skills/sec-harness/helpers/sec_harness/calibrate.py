@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from sec_harness.campaign import record_stage
 from sec_harness.cvss import cvss31_base, offensive_priority
 from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.workspace import Workspace, read_findings, write_findings
@@ -166,6 +167,7 @@ def calibrate_findings(ws: Workspace) -> int:
             scored += 1
     if scored:
         write_findings(ws, findings)
+    record_stage(ws, "calibrate")
     return scored
 
 

@@ -124,3 +124,12 @@ def test_dedupe_stamps_symbol_anchored_fingerprint(tmp_path):
     dedupe_findings(ws)
     got = {f.id: f.fingerprint for f in read_findings(ws)}
     assert got["F-1"] == got["F-2"]                     # anchored to run_query -> equal
+
+
+def test_dedupe_findings_records_stage(tmp_path):
+    from sec_harness.state import load_state
+
+    ws = Workspace(tmp_path / "workspace"); ws.ensure()
+    write_findings(ws, [_f("F-0001", "sqli", "app.py", 18, Severity.HIGH)])
+    dedupe_findings(ws)
+    assert "dedupe" in load_state(ws).stages
