@@ -34,6 +34,8 @@ _CONTEXT_GLOBS = (
     "*security*review*.md", "*e2e-security*.md", "test-findings*.md",
     "claudedocs/**/*.md", "ARCHITECTURE.md", "CONTRIBUTING.md",
 )
+_DIAGRAM_TEXT_GLOBS = ("**/*.puml", "**/*.dot", "**/*.mmd")
+_DIAGRAM_IMAGE_GLOBS = ("**/*.puml.png", "**/*.puml.svg", "**/*.drawio.png")
 _SKIP = ("node_modules", "vendor", ".git", "dist", "build", ".sec-harness")
 _MAX_FILES = 200
 
@@ -90,22 +92,39 @@ class Context:
         return cls(items=items, provenance=d.get("provenance", {}))
 
 
-def discover_context_files(target: str | Path) -> list[str]:
-    """Return repo-relative paths of candidate context docs (deterministic, capped).
+def discover_context_files(repo_root: str | Path, scan_scope: str = ".") -> list[str]:
+    """Return repo-root-relative candidate context docs (deterministic, capped).
+
+    Globs from ``repo_root`` (not a sub-path), so a monorepo sub-service scan also finds
+    the service's docs at the repo root. Includes narrative ``.md``, plain-text diagrams
+    (``.puml``/``.dot``/``.mmd`` — machine-readable), and canonical monorepo service-doc dirs
+    derived from ``scan_scope``. Image-only diagrams (``.puml.png``/``.svg``) are returned too
+    so the caller can record them as coverage items rather than silently skipping them.
 
     Args:
-        target: Repo root.
+        repo_root: The git top-level (canonical resolution base).
+        scan_scope: Target path relative to ``repo_root`` ("." for a whole-repo scan).
 
     Returns:
-        Sorted, de-duplicated relative paths (≤ ``_MAX_FILES``) worth reading. Includes
-        a prior ``.sec-harness`` scan's ``prior_context.json`` marker if present.
+        Sorted, de-duplicated repo-root-relative paths (≤ ``_MAX_FILES``).
     """
-    root = Path(target)
+    root = Path(repo_root)
     found: set[str] = set()
-    for pat in _CONTEXT_GLOBS:
+    globs = _CONTEXT_GLOBS + _DIAGRAM_TEXT_GLOBS + _DIAGRAM_IMAGE_GLOBS
+    for pat in globs:
         for p in root.glob(pat):
             if p.is_file() and not any(s in p.parts for s in _SKIP):
-                found.add(str(p.relative_to(root)))
+                found.add(p.relative_to(root).as_posix())
+    # scan_scope sub-tree + canonical monorepo service-doc dirs for a sub-service scan
+    if scan_scope != ".":
+        for p in (root / scan_scope).glob("**/*.md"):
+            if p.is_file() and not any(s in p.parts for s in _SKIP):
+                found.add(p.relative_to(root).as_posix())
+        svc = Path(scan_scope).name
+        for base in (f"docs/services/{svc}", f"docs/global-services/{svc}", f"docs/{svc}"):
+            for p in (root / base).glob("**/*.md"):
+                if p.is_file():
+                    found.add(p.relative_to(root).as_posix())
     return sorted(found)[:_MAX_FILES]
 
 

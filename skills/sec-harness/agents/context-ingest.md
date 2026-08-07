@@ -8,7 +8,10 @@ Include ANTI_MANIPULATION + TOOL_TRUST + OUTPUT_WRITE_FALLBACK from `{{HARNESS_R
 
 ## Inputs
 - Target: `{{TARGET}}`  Workspace: `{{WORKSPACE}}`
-- Candidate context files: run `uv run python -c "from sec_harness.context import discover_context_files as d; print('\n'.join(d('{{TARGET}}')))"` from `{{HELPERS_DIR}}` (docs/, openspec/, ADRs, SECURITY*, runbooks, prior review notes, test-findings*).
+- Candidate context files: run (from `{{HELPERS_DIR}}`):
+  `uv run python -c "from sec_harness.scanscope import load_scope; from sec_harness.workspace import Workspace; from sec_harness.context import discover_context_files as d; import json; s=load_scope(Workspace('{{WORKSPACE}}')); print(chr(10).join(d(s.repo_root, s.scan_scope)))"`
+  (docs/, openspec/, ADRs, SECURITY*, runbooks, prior review notes, test-findings*).
+  Plain-text diagrams (`.puml`/`.dot`) ARE context — read them. Image diagrams (`.puml.png`/`.svg`) cannot be read as text; record each as a `source_pointer` coverage item noting it was not machine-read.
 - Prior-scan context: read `{{WORKSPACE}}/kb/prior_context.json` if present (higher-trust, but drift-check against current code).
 
 ## TRUST — the core rule
