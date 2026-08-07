@@ -86,11 +86,15 @@ relevant companions by detected frameworks/target type and records them in
 | `hunting/client-side.md` | `dom-xss`, `dom-clobbering`, `cswsh`, `prototype-pollution`, `open-redirect-client` |
 | `hunting/ai-agent.md` | `excessive-agency`, `denial-of-wallet`, `mcp-trust-inheritance`, `context-bleed`, `prompt-injection` |
 | `hunting/business-logic.md` | `business-logic`, `feature-abuse`, `chained` |
+| `hunting/graphql-injection.md` | `graphql` |
 | `hunting/memory-native.md` | `spatial-oob`, `temporal-uaf`, `type-confusion` (only when native/unsafe code is present) |
 
 Selection guidance: choose a companion when its frameworks/indicators appear (JWT/OAuth/
 SAML libs → web-protocol-auth; browser/DOM/React → client-side; LangChain/LangGraph/MCP →
-ai-agent; always consider business-logic; memory-native only for C/C++/unsafe). Companion
+ai-agent; always consider business-logic; memory-native only for C/C++/unsafe; GraphQL
+libraries (`graphql`, `apollo-server`, `graphql-yoga`, `@nestjs/graphql`, `graphene`,
+`strawberry-graphql`, `gqlgen`, `async-graphql`) or a `.graphql`/`.graphqls` schema file
+→ graphql-injection). Companion
 classes flow through `agents_to_spawn` + `clsmap` exactly like universal ones.
 
 ## Class disambiguation (cross-class boundary discipline)
