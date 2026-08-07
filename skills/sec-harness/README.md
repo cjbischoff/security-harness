@@ -16,8 +16,8 @@ These hold everywhere and are enforced (in code where possible, prompt otherwise
   the whole workspace with `--workspace`). A seeded `.sec-harness/.gitignore` keeps that
   output out of the repo's git tree.
 - **Tool-receipt gate.** A finding can only reach `confirmed` with ≥1 mechanical receipt
-  (`semgrep`/`codeql`/`ast-grep`/`ripgrep`/`structural-index`/`secrets`/`sca`). LLM
-  reasoning alone (`llm-claimed:*`) can corroborate but never confirm. Enforced in
+  (`semgrep`/`codeql`/`ast-grep`/`tree-sitter`/`ripgrep`/`structural-index`/`secrets`/`sca`).
+  LLM reasoning alone (`llm-claimed:*`) can corroborate but never confirm. Enforced in
   `findings_gate`.
 - **Signal over noise.** Adversarial validation (opus, different model family than the
   sonnet finder), an FP-reduction ladder, and a `needs-deployment-testing` verdict for
@@ -27,15 +27,20 @@ These hold everywhere and are enforced (in code where possible, prompt otherwise
 
 ```
 SKILL.md                     the operational playbook (phase order + per-phase detail)
-agents/                      LLM agent prompts: recon, architecture, threat-model,
-                             investigate, critic, validate (opus), patch, validate-fix,
-                             factcheck, tune-config; classes/ (CWE-class fix extensions)
+agents/                      LLM agent prompts: context-ingest/context-adversary,
+                             recon, architecture, threat-model, phase-adversary,
+                             tune-config, investigate, critic, judge, validate (opus),
+                             trace, patch, validate-fix, factcheck, redteam,
+                             redteam-adversary, postflight (optional narrative),
+                             variant-hunt + bugchain (optional coverage extensions);
+                             classes/ (CWE-class fix extensions)
 references/                  attack-classes.md, prompt-constants.md, finding-template.md,
                              hunting/ (domain knowledge), asvs/ + codeguard/ (compliance
                              corpora), approved-crypto-*.yaml, DETECTION_COVERAGE.md, schemas
-helpers/sec_harness/         the deterministic Python core (62 modules)
+helpers/sec_harness/         the deterministic Python core (67 modules)
 helpers/bench/               dev-only evaluation harness (not part of a scan)
-helpers/tests/               370 pytest tests
+helpers/tests/               474 pytest tests (1 env-only failure: bench corpus seed,
+                             gitignored — see CLAUDE.md §2)
 ```
 
 ## Pipeline (per SKILL.md)
@@ -51,6 +56,9 @@ helpers/tests/               370 pytest tests
    CANDIDATE findings (`context.control_findings`, `llm-claimed` evidence — can't confirm on
    doc text). `agents/context-adversary.md` (opus) pressure-checks that verification. Repo
    docs are untrusted claims — they never suppress or auto-confirm a finding.
+1.75 **Tier-1 substrate** — `python -m sec_harness.graph build` (LLM-free): structural
+   index + regex call-edge heuristic + osv/secrets/crypto facts → `kb/graph.json`, consumed
+   by recon, architecture, threat-model, and dedupe's fingerprinting.
 2–4. **Recon → Architecture → Threat model** (sonnet agents) — build the KB
    (`scan-profile.json`, `architecture.md`, `entities/`, `THREAT_MODEL.md`). **Each ends with a
    phase adversary gate** (`agents/phase-adversary.md`, opus): deterministic ref-resolution
@@ -64,10 +72,13 @@ helpers/tests/               370 pytest tests
    dispatch until K consecutive waves add no new fingerprints (`saturated`) or a cap
    (`capped`), tracked in `kb/discovery-ledger.json`. On pass N>1, prior `rejected`
    findings are injected as envelope-wrapped negative examples (`fp_feedback`).
-7–10. **FP ladder** — dedupe → critic → **adversarial-validate (opus)** → calibrate.
-   Citations (ASVS/CodeGuard) auto-attach at calibrate. Dedupe stamps a
-   **refactor-resistant fingerprint** (`rule_id|cls|enclosing-symbol` via the `graph`
-   substrate) so cross-pass diffing survives line shifts.
+7–10. **FP ladder** — dedupe → critic → judge (cheap, tool-free adjudicator) →
+   **adversarial-validate (opus, tries to refute)** → trace (reachability verdict:
+   static-settled vs needs-runtime) → calibrate. Citations (ASVS/CodeGuard) auto-attach
+   at calibrate. Dedupe stamps a **refactor-resistant fingerprint**
+   (`rule_id|cls|enclosing-symbol` via the `graph` substrate) so cross-pass diffing
+   survives line shifts. Judge and validate must never run concurrently against the
+   same finding file — the last writer silently drops the other's field.
 10.5 **Fact-check** (F8) — a fresh agent re-verifies each written finding's citations/
    scope/severity against source.
 11–14. **Patch (opus) → validate-fix → verify (no LLM) → report** — verify applies the
@@ -160,10 +171,10 @@ python -m bench.run --corpus bench/corpus_seed --run-dir /tmp/bench --workspaces
 ## Develop
 
 ```bash
-cd helpers && uv run pytest -q          # 370 tests
+cd helpers && uv run pytest -q          # 474 tests
 uv run ruff check sec_harness/ bench/ tests/
+uv run ty check
 ```
 
-Design + roadmap: `../../docs/superpowers/specs|plans/2026-07-30-sec-harness-enhancements-*.md`
-and `../../docs/sec-harness-go-migration-context.md` (native-Go port, incl. the deferred
-tree-sitter call-graph indexer).
+Operating manual: `CLAUDE.md` (git protocol, JSON-contract coupling with the Go port,
+environment prerequisites). Full phase-by-phase playbook: `SKILL.md`.
