@@ -314,3 +314,13 @@ def test_condensed_tier_renumbers_without_gaps():
     assert "**1. Summary" in out and "**2. Mechanism" in out
     assert "**3. Severity" in out and "**4. Fix" in out
     assert "**5. " not in out and "**7. " not in out
+
+
+def test_dep_view_shows_caution_when_patch_not_applied():
+    from sec_harness.report import render_finding
+    dep = Finding(id="DEP-2", rule_id="osv:GHSA-y", cls="deps",
+                  status=FindingStatus.FIXED, severity=Severity.LOW,
+                  file="package-lock.json", line=1, message="pkg@1.0: GHSA-y",
+                  evidence="pkg@1.0", patch_diff="--- a/x\n+++ b/x\n")
+    md = render_finding(dep, patch_status=PatchStatus.NOT_APPLIED)
+    assert "Caution" in md and "NOT been confirmed applied" in md

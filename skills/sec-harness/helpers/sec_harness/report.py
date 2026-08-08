@@ -26,7 +26,7 @@ def render_finding(f: Finding, patch_status: PatchStatus | None = None) -> str:
     """Render one finding as the verified-finding template (references/finding-template.md).
 
     Populated entirely from the Finding JSON fields so the prose never drifts from
-    the data. Critical/High get the full 9 sections; Medium/Low get a condensed
+    the data. Critical/High get the full 8 sections; Medium/Low get a condensed
     form (Summary, Mechanism, Severity, Fix). Dependency findings get a purpose-built
     dep-view (Summary with package@version, advisory, Reachability, Fix). The harness
     is static-only, so the Confirmation and Attack-Scenario sections are marked as
@@ -58,6 +58,10 @@ def render_finding(f: Finding, patch_status: PatchStatus | None = None) -> str:
                 f"{f.message.split('|', 1)[0].strip()}"), "",
                (f"**Fix.** Bump `{pkg.split('@')[0]}` to a release that resolves "
                 f"`{adv}`."), ""]
+        if f.status is FindingStatus.FIXED and patch_status is not None:
+            caution = not_applied_caution(patch_status)
+            if caution:
+                out.insert(1, caution)   # right after the header line
         return "\n".join(out)
 
     receipts = [s for s in f.evidence_sources if is_tool_receipt(s)]
