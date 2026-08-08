@@ -324,3 +324,26 @@ def test_dep_view_shows_caution_when_patch_not_applied():
                   evidence="pkg@1.0", patch_diff="--- a/x\n+++ b/x\n")
     md = render_finding(dep, patch_status=PatchStatus.NOT_APPLIED)
     assert "Caution" in md and "NOT been confirmed applied" in md
+
+
+def _ndt():
+    return Finding(rule_id="investigation:authz", cls="authz",
+                   status=FindingStatus.NEEDS_DEPLOYMENT_TESTING, severity=Severity.MEDIUM,
+                   file="src/rbac/spec.js", line=133, risk_score=5,
+                   message="sole unrestrictedInTaas write; cross-CE injection if Go handler unscoped",
+                   dataflow=["privilege(unrestrictedInTaas) @ spec.js:133", "-> Go handler UNVERIFIED"],
+                   preconditions=["Go handler does not enforce per-CE isolation"],
+                   runtime_test={"objective": "verify CE-ID isolation on operatorFeedbackWrite",
+                                 "expected_signal": {"secure": "403", "insecure": "201 + CE-B record"}},
+                   id="N-1")
+
+
+def test_render_ndt_labels_needs_runtime_and_shows_test():
+    from sec_harness.report import render_ndt
+    out = render_ndt(_ndt())
+    assert "needs runtime" in out.lower()                 # always labeled
+    assert "confirmed" not in out.lower()                 # never laundered
+    assert "spec.js:133" in out
+    assert "verify CE-ID isolation" in out                # the test objective
+    assert "403" in out and "201 + CE-B record" in out    # secure/insecure signal
+    assert "redteam-plan.md" in out                       # pointer to the runnable test

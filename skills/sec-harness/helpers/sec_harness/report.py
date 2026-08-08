@@ -127,6 +127,37 @@ def render_finding(f: Finding, patch_status: PatchStatus | None = None) -> str:
     return "\n".join(out)
 
 
+def render_ndt(f: Finding) -> str:
+    """Render a needs-deployment-testing finding as a foregrounded, needs-runtime-labeled view.
+
+    Populated from the fields an NDT finding actually carries — ``message`` (what/why),
+    ``dataflow`` (source-side chain), ``preconditions``, and ``runtime_test`` (objective +
+    secure/insecure signal). Always labeled needs-runtime and never described as confirmed; the
+    runnable payloads/telemetry live in ``redteam-plan.md``.
+
+    Args:
+        f: A needs-deployment-testing finding.
+
+    Returns:
+        A Markdown section string for the finding.
+    """
+    rt = f.runtime_test or {}
+    sig = rt.get("expected_signal") or {}
+    flow = "\n".join(f"  - `{hop}`" for hop in (f.dataflow or [])) or "  - (no source chain recorded)"
+    pre = "\n".join(f"  - {p}" for p in (f.preconditions or [])) or "  - (none recorded)"
+    out = [f"### {f.id} — {f.cls} — {f.severity.value.title()} · needs runtime proof", "",
+           f"**What.** {f.message}  \nLocation: `{f.file}:{f.line}`.", "",
+           "**Source-side chain.**", flow, "",
+           "**Preconditions (out-of-repo barrier).**", pre, ""]
+    if rt.get("objective"):
+        out += [f"**Runtime test.** {rt['objective']}"]
+        if sig:
+            out += [f"  - **secure:** {sig.get('secure', '_unspecified_')}",
+                    f"  - **insecure:** {sig.get('insecure', '_unspecified_')}"]
+        out += ["_Runnable payloads + telemetry: see `redteam-plan.md`._", ""]
+    return "\n".join(out)
+
+
 def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = None,
                 needs_deployment: list[Finding] | None = None,
                 coverage: dict | None = None, coverage_ledger: dict | None = None,
