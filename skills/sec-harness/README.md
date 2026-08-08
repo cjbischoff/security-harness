@@ -1,180 +1,243 @@
 # sec-harness
 
-A self-contained, agentic **security-audit harness**. It runs bundled SAST, drives
-LLM investigation/validation/patching agents over a knowledge base, and emits SARIF +
-Markdown reports with a citable compliance dimension — grounding every confirmed finding
-in a mechanical tool receipt.
+A self-contained, **agentic security-audit harness**. Point it at a codebase and it finds
+*actually-exploitable* vulnerabilities, then hands a security engineer artifacts they can act
+on: a threat model, per-finding evidence, a SARIF file, a Markdown report, and a manual
+runtime-test plan.
 
-## Invariants
+The core idea in one sentence: **run cheap mechanical tools to find candidates, use LLM
+agents to investigate whether each candidate is real, and never let an LLM's opinion alone
+confirm a finding — a mechanical tool receipt is always required.**
 
-These hold everywhere and are enforced (in code where possible, prompt otherwise):
+This README is the map. It explains *how the whole thing fits together* and hands you off to
+the three folder READMEs and the operational playbook for detail.
 
-- **Never executes or modifies the reviewed source.** Static analysis only; patches
-  apply to a throwaway copy — the repo's own source files are never run or edited.
-- **Writes only its own sidecar.** Scan artifacts live in an in-repo, self-ignoring
-  `<target>/.sec-harness/<slug>/` dir (override the base with `$SEC_HARNESS_HOME`, or
-  the whole workspace with `--workspace`). A seeded `.sec-harness/.gitignore` keeps that
-  output out of the repo's git tree.
-- **Tool-receipt gate.** A finding can only reach `confirmed` with ≥1 mechanical receipt
-  (`semgrep`/`codeql`/`ast-grep`/`tree-sitter`/`ripgrep`/`structural-index`/`secrets`/`sca`).
-  LLM reasoning alone (`llm-claimed:*`) can corroborate but never confirm. Enforced in
-  `findings_gate`.
-- **Signal over noise.** Adversarial validation (opus, different model family than the
-  sonnet finder), an FP-reduction ladder, and a `needs-deployment-testing` verdict for
-  bugs unprovable from source keep false positives out of the report.
+| To understand… | Read |
+|----------------|------|
+| The full phase-by-phase operating playbook | [`SKILL.md`](SKILL.md) |
+| Git protocol, the Go-port contract, environment setup | [`CLAUDE.md`](CLAUDE.md) |
+| The LLM prompts that investigate/validate/patch | [`agents/README.md`](agents/README.md) |
+| The Python core that runs tools & enforces gates | [`helpers/README.md`](helpers/README.md) |
+| The rule book (severity, scope, schemas, crypto policy) | [`references/README.md`](references/README.md) |
 
-## Layout
+---
 
+## The four invariants (what makes findings trustworthy)
+
+These hold everywhere and are enforced in code where possible, prompt otherwise:
+
+1. **Never executes or modifies the reviewed source.** Static analysis only. Patches are
+   applied to a *throwaway copy* to verify them — the repo's own files are never run or edited.
+2. **Writes only its own sidecar.** All output lives in an in-repo, self-ignoring
+   `<target>/.sec-harness/<slug>/` directory (override the base with `$SEC_HARNESS_HOME`, or
+   the whole workspace with `--workspace`). A seeded `.sec-harness/.gitignore` keeps output
+   out of the reviewed repo's git tree.
+3. **Tool-receipt gate.** A finding reaches `confirmed`/`fixed` only with ≥1 mechanical
+   receipt (`semgrep` / `codeql` / `ast-grep` / `tree-sitter` / `ripgrep` /
+   `structural-index` / `secrets` / `sca`). LLM reasoning is namespaced `llm-claimed:` and can
+   corroborate but **never** confirm. Enforced in `helpers/…/findings_gate.py`.
+4. **Signal over noise.** Every load-bearing claim made by a Sonnet "producer" is attacked by
+   an Opus "adversary" on a different model family; a false-positive ladder + a
+   `needs-deployment-testing` verdict for bugs unprovable-from-source keep the report clean.
+
+---
+
+## Architecture — three folders, three jobs
+
+```mermaid
+flowchart TB
+    subgraph HARNESS["skills/sec-harness/"]
+        direction TB
+        SKILL["SKILL.md<br/>the orchestration playbook"]
+        subgraph REF["references/ — the RULE BOOK"]
+            R1["prompt-constants, attack-classes,<br/>schemas, crypto policy, hunting/ guides"]
+        end
+        subgraph AG["agents/ — the JUDGEMENT"]
+            A1["~30 LLM prompts:<br/>producer (sonnet) vs adversary (opus)"]
+        end
+        subgraph HP["helpers/ — the MACHINE"]
+            H1["~70 stdlib-only Python modules:<br/>run SAST, enforce gates, write reports"]
+        end
+    end
+    TARGET[("target codebase<br/>(read-only)")]
+    OUT[("<target>/.sec-harness/<slug>/<br/>KB + findings + reports")]
+
+    SKILL -->|drives| AG
+    SKILL -->|calls| HP
+    AG -->|"reads rules"| REF
+    HP -->|"reads schemas/policy"| REF
+    HP -->|"reads only"| TARGET
+    AG -->|"reads only"| TARGET
+    HP -->|"writes"| OUT
+    AG -->|"writes"| OUT
 ```
-SKILL.md                     the operational playbook (phase order + per-phase detail)
-agents/                      LLM agent prompts: context-ingest/context-adversary,
-                             recon, architecture, threat-model, phase-adversary,
-                             tune-config, investigate, critic, judge, validate (opus),
-                             trace, patch, validate-fix, factcheck, redteam,
-                             redteam-adversary, postflight (optional narrative),
-                             variant-hunt + bugchain (optional coverage extensions);
-                             classes/ (CWE-class fix extensions)
-references/                  attack-classes.md, prompt-constants.md, finding-template.md,
-                             hunting/ (domain knowledge), asvs/ + codeguard/ (compliance
-                             corpora), approved-crypto-*.yaml, DETECTION_COVERAGE.md, schemas
-helpers/sec_harness/         the deterministic Python core (67 modules)
-helpers/bench/               dev-only evaluation harness (not part of a scan)
-helpers/tests/               474 pytest tests (1 env-only failure: bench corpus seed,
-                             gitignored — see CLAUDE.md §2)
+
+- **`references/`** is stated once, obeyed everywhere — severity bands, scope rules, JSON
+  schemas, the crypto allow/deny lists, and the deep hunting guides. → [details](references/README.md)
+- **`agents/`** are the LLM prompts. Producers (Sonnet) find things; adversaries (Opus, a
+  different family) try to prove them wrong. → [details](agents/README.md)
+- **`helpers/`** is the deterministic Python that runs the tools and *enforces the gates no
+  LLM is trusted to enforce.* Stdlib-only. → [details](helpers/README.md)
+
+The main agent (you, driving [`SKILL.md`](SKILL.md)) is the orchestrator: it calls a Python
+step, spawns an agent, records the phase, calls the next Python step.
+
+---
+
+## The pipeline
+
+One audit pass, in order. Deterministic (Python) steps are rectangles; agent (LLM) steps are
+rounded. `<T>` = target, `<WS>` = workspace.
+
+```mermaid
+flowchart TD
+    P0["0 · preflight<br/>tools + CodeQL packs present?"] --> P1["1 · begin_pass<br/>pin SHA"]
+    P1 --> C1(("C1 · context-ingest → context-adversary<br/>repo docs as UNTRUSTED leads"))
+    C1 --> T1["T1 · graph build<br/>Tier-1 substrate (LLM-free)"]
+    T1 --> RA(("2-4 · recon → architecture → threat-model<br/>each gated by phase-adversary (opus)"))
+    RA --> PRE["5 · prefilter<br/>semgrep+codeql+sca+secrets, never-silent"]
+    PRE --> INV(("6 · investigate<br/>parallel per class, loop-until-dry"))
+    INV --> DED["7 · dedupe<br/>refactor-resistant fingerprint"]
+    DED --> LAD(("8-9 · critic → judge → validate(opus refutes)"))
+    LAD --> CAL["10 · calibrate<br/>risk_score 1-10 + citations"]
+    CAL --> PAT(("11 · patch(opus) → validate-fix"))
+    PAT --> VER["12 · verify<br/>apply patch to COPY, re-scan"]
+    VER --> GATE["13 · findings_gate"]
+    GATE --> RT(("13.5 · redteam → redteam-adversary"))
+    RT --> RTR["redteam.py → redteam-plan.md"]
+    RTR --> REP["14 · report<br/>report.sarif + report.md"]
+    REP --> C2["C2 · postflight<br/>durable prior_context.json"]
 ```
 
-## Pipeline (per SKILL.md)
+The phase legend with exact commands is in [`SKILL.md`](SKILL.md); the hard operating rules
+(a partial scan is a coverage hole, not "clean") are in [`CLAUDE.md`](CLAUDE.md) §3.
 
-0. **Preflight** — `python -m sec_harness.preflight` (checks semgrep/codeql/ast-grep +
-   per-language CodeQL query packs + optional osv-scanner/gitleaks; lists what's missing).
-1. **Begin pass** — `from sec_harness.state import begin_pass`.
-1.5 **Context-ingest (C1)** — `agents/context-ingest.md` distills the repo's OWN docs
-   (`docs/`, `openspec/`, ADRs, `SECURITY*`, runbooks, prior review notes) **and** prior
-   scans into `kb/context.json`, trust-tagged. It DRIVES the scan: trust boundaries +
-   claimed controls → threat-model hunt rows. **C1 verifies now:** each claimed control gets
-   a `verify_status` (PRESENT/MISSING/BYPASSABLE) vs code; MISSING/BYPASSABLE → `CTL-####`
-   CANDIDATE findings (`context.control_findings`, `llm-claimed` evidence — can't confirm on
-   doc text). `agents/context-adversary.md` (opus) pressure-checks that verification. Repo
-   docs are untrusted claims — they never suppress or auto-confirm a finding.
-1.75 **Tier-1 substrate** — `python -m sec_harness.graph build` (LLM-free): structural
-   index + regex call-edge heuristic + osv/secrets/crypto facts → `kb/graph.json`, consumed
-   by recon, architecture, threat-model, and dedupe's fingerprinting.
-2–4. **Recon → Architecture → Threat model** (sonnet agents) — build the KB
-   (`scan-profile.json`, `architecture.md`, `entities/`, `THREAT_MODEL.md`). **Each ends with a
-   phase adversary gate** (`agents/phase-adversary.md`, opus): deterministic ref-resolution
-   pre-check → independent challenge of the analysis before later phases trust it
-   (`sec_harness.phase_gate`, audit record in `kb/gates/<phase>.json`).
-5. **Prefilter** (no LLM) — `run_prefilter` runs semgrep + codeql + osv-scanner (SCA) +
-   secrets concurrently; classifies via `clsmap`; **never-silent** (any declared backend
-   that doesn't run is recorded). Optional ASVS/CodeGuard `rule_matcher` pre-filter.
-6. **Investigate** (sonnet, parallel per class) — gate ladder (−1 sanity … 3 new
-   capability); confirmed → `raw`. Runs as a **loop-until-dry** saturation loop: waves
-   dispatch until K consecutive waves add no new fingerprints (`saturated`) or a cap
-   (`capped`), tracked in `kb/discovery-ledger.json`. On pass N>1, prior `rejected`
-   findings are injected as envelope-wrapped negative examples (`fp_feedback`).
-7–10. **FP ladder** — dedupe → critic → judge (cheap, tool-free adjudicator) →
-   **adversarial-validate (opus, tries to refute)** → trace (reachability verdict:
-   static-settled vs needs-runtime) → calibrate. Citations (ASVS/CodeGuard) auto-attach
-   at calibrate. Dedupe stamps a **refactor-resistant fingerprint**
-   (`rule_id|cls|enclosing-symbol` via the `graph` substrate) so cross-pass diffing
-   survives line shifts. Judge and validate must never run concurrently against the
-   same finding file — the last writer silently drops the other's field.
-10.5 **Fact-check** (F8) — a fresh agent re-verifies each written finding's citations/
-   scope/severity against source.
-11–14. **Patch (opus) → validate-fix → verify (no LLM) → report** — verify applies the
-   patch to a copy, re-scans, and matches the finding's own rule.
-14.5 **Red Team (static→runtime bridge)** — `agents/redteam.md` classifies each confirmed
-   finding `static-settled` vs `needs-runtime` and writes a `runtime_test` (payloads with
-   `$SHELL_VARS`); `agents/redteam-adversary.md` (opus) pressure-checks the plan;
-   `python -m sec_harness.redteam` renders `redteam-plan.md` (only findings ≥ the confidence
-   bar). The harness never executes — it hands an operator a prioritized manual-test plan.
-15. **Postflight (C2)** — `python -m sec_harness.postflight` distills settled results
-   (confirmed findings + rejected-with-rationale + a codebase-security-profile) into the
-   durable `kb/prior_context.json`, drift-keyed by SHA; the next scan's C1 ingests it.
+---
 
-Deterministic steps run via `uv run python -m sec_harness.<module>` from `helpers/`.
+## Worked example — one SQL-injection finding, end to end
 
-## Per-repo memory & resume
+To make the flow concrete, here is what happens to a single bug as it moves through the
+pipeline. Say the target is a Flask app with this route:
 
-Every scan persists to an in-repo `<target>/.sec-harness/<slug>/` (override the base
-with `$SEC_HARNESS_HOME`, or the workspace with `--workspace`): the KB, `findings/`,
-`state.json`, a human `MEMORY.md` index, dated `learnings/`, and reports. The sidecar
-is self-ignoring (seeded `.sec-harness/.gitignore`). It survives across runs, so an
-interrupted campaign resumes at the next phase.
+```python
+# app/routes.py
+@app.route("/user")
+def get_user():
+    uid = request.args.get("id")               # attacker-controlled
+    return db.execute("SELECT * FROM users WHERE id = " + uid)   # string-built SQL
+```
+
+| Phase | What runs | What happens to this bug | Artifact touched |
+|-------|-----------|--------------------------|------------------|
+| **C1 context** | `context-ingest` (sonnet) | Reads the repo's docs; a runbook *claims* "all inputs validated by middleware." That claim is tagged **untrusted** — it becomes a lead to verify, not a safe-list. | `kb/context.json` |
+| **T1 substrate** | `graph build` (no LLM) | Builds a call graph: `request.args` is an entry point; `db.execute` is a sink; there's a one-hop edge between them. | `kb/graph.json` |
+| **2-4 analysis** | recon → architecture → threat-model | `injection` lands on the prioritized hunt list because recon saw Flask + raw SQL; opus phase-adversary confirms the entrypoint claim resolves to real code. | `kb/scan-profile.json`, `THREAT_MODEL.md` |
+| **5 prefilter** | semgrep + codeql (no LLM) | semgrep's SQLi rule fires on line 4 → a **candidate** with a real receipt `semgrep:<rule>`. | `findings/C-0001.json` (candidate) |
+| **6 investigate** | `investigate.md` (sonnet, `injection`) | Walks the gate ladder: cited code exists (Gate −1 ✓), reachable from `request.args` (Gate 1 ✓, `codeql:dataflow` receipt), `uid` is attacker-controlled (Gate 2a ✓), **reads the claimed middleware — it only trims whitespace, doesn't parameterize** (Gate 2b: sanitizer does *not* apply ✓), yields DB read/write (Gate 3 ✓). Promoted to **`raw`**. | status → `raw` |
+| **7 dedupe** | `dedupe` (no LLM) | Stamps fingerprint `sha256(sqli\|injection\|get_user)` so a later refactor that shifts the line still maps to the same finding. | `fingerprint` field |
+| **8 critic** | `critic.md` (sonnet) | It's on a live route, not debug/test code → stays `raw`. | history: `critic:viable` |
+| **9 validate** | `validate.md` (**opus**) | *Assumes it's wrong* and re-traces independently, trying to refute. Cannot find a sanitizer on any path → **survives** → **`confirmed`**. (To reject it would have needed a `file:line` cite of a real defeating control.) | status → `confirmed` |
+| **10 calibrate** | `calibrate` (no LLM) | Preconditions enumerated first (unauthenticated, no WAF assumed) → CVSS computed by formula → `risk_score: 9`. ASVS/CodeGuard citations auto-attached. | `risk_score`, `asvs_ids` |
+| **11 patch** | `patch.md` (opus) | Proposes a parameterized-query diff into `patch_diff` — against a *copy*, never the real file. | `patch_diff` |
+| **12 verify** | `verify` (no LLM) | Applies the diff to a temp copy, re-runs semgrep → the rule no longer fires → **`fixed` / verified-static**. | status → `fixed` |
+| **13.5 redteam** | `redteam` → `redteam-adversary` | Marks it `static-settled` (source proves it) but still writes a `runtime_test` with a `$PAYLOAD` shell var so an operator can confirm live; opus adversary keeps it (payload ties to the real sink). | `redteam-plan.md` |
+| **14 report** | `report` (no LLM) | Renders the finding into `report.md` (9-section template) and `report.sarif`. | `report.md`, `report.sarif` |
+| **C2 postflight** | `postflight` | Records "confirmed SQLi in get_user, fixed at <sha>" into durable memory so the next scan doesn't re-litigate it. | `kb/prior_context.json` |
+
+The point of the table: **no single step is trusted.** A tool found it, a sonnet agent
+investigated it, an opus agent tried to kill it, a deterministic module scored it, and a
+second deterministic module proved the fix — each leaving a receipt on disk.
+
+---
+
+## How to run it
+
+### Quick deterministic smoke scan (no agents)
+Fastest way to see output. From `helpers/`:
 
 ```bash
-python -m sec_harness.cli scan   --target <repo> --config rules/semgrep/<lang>   # defaults workspace to memory
-python -m sec_harness.cli memory --target <repo>                                  # status / resumable / next phase
-python -m sec_harness.cli memory --target <repo> --learn "..." --tag crypto        # append a learning
+cd helpers
+uv run python -m sec_harness.cli scan \
+  --target <path-to-code> \
+  --config rules/smoke.yaml \
+  --sha "$(git -C <path-to-code> rev-parse HEAD)"
+# workspace defaults to <target>/.sec-harness/<slug>/
 ```
 
-## Evaluation (`helpers/bench/`, dev-only)
+This runs semgrep → normalize → SARIF/Markdown only. It is the smoke path, **not** a real
+audit (no agents, no gate ladder).
 
-Measures + locks detection quality — not part of a scan:
-
-- **Layer A** detection benchmark: labelled corpus (positives/negatives) → scan via a
-  swappable adapter → deterministic-first + LLM-fallback judge → precision/recall by
-  source & class + FP-rate.
-- **Layer B** regression corpus: a `locked` finding that stops being detected fails the run.
-- **Layer C** contract/wiring tests (`tests/test_contracts.py`, `test_wiring.py`):
-  prompt↔schema drift + backend reachability, deterministic.
+### Full agentic audit
+Driven by the main agent following [`SKILL.md`](SKILL.md). The short version:
 
 ```bash
-python -m bench.run --corpus bench/corpus_seed --run-dir /tmp/bench --workspaces <dir>
+cd helpers
+uv run python -m sec_harness.preflight        # 0 — verify semgrep/codeql/ast-grep + CodeQL packs
+# 1  begin_pass(WS, sha)
+# C1 spawn agents/context-ingest.md → context-adversary.md
+uv run python -m sec_harness.graph build --target <T> --workspace <WS> --sha <sha>   # T1
+# 2-4 spawn recon → architecture → threat-model (+ phase-adversary each)
+# 5  from sec_harness.prefilter import run_prefilter; run_prefilter(ws, target, profile)
+# 6  spawn agents/investigate.md in parallel per attack class
+uv run python -m sec_harness.dedupe        --workspace <WS>    # 7
+# 8-9 spawn critic → judge → validate
+uv run python -m sec_harness.calibrate     --workspace <WS>    # 10
+# 11 spawn patch → validate-fix
+uv run python -m sec_harness.verify        --workspace <WS> --target <T> --config <rules>   # 12
+uv run python -m sec_harness.findings_gate --workspace <WS>    # 13
+# 13.5 spawn redteam → redteam-adversary
+uv run python -m sec_harness.redteam       --workspace <WS>
+uv run python -m sec_harness.report        --workspace <WS>    # 14
+uv run python -m sec_harness.postflight    --workspace <WS> --sha <sha>   # C2
 ```
 
-## Feature highlights
+> **A scan is clean only if every planned backend actually ran.** If `preflight` shows a
+> missing CodeQL pack, that language has *zero dataflow coverage* — a partial scan is a
+> coverage hole, not "no findings." See [`CLAUDE.md`](CLAUDE.md) §3.
 
-- **Adversarial-review all things** — every analysis/context phase (recon, architecture,
-  threat-model, C1) ends with a phase adversary gate (deterministic ref-check → independent
-  opus challenge) so no phase trusts another's output un-challenged; findings keep the FP
-  ladder (critic + adversarial-validate).
-- **Red-team static→runtime bridge** — a dedicated phase turns confirmed findings into a
-  prioritized MANUAL runtime test plan (`redteam-plan.md`): discriminates static-settled vs
-  needs-runtime, emits `$SHELL_VARS` payloads + expected signal + telemetry, high-confidence
-  only. Bridges static analysis to what a human tests live; the harness still never executes.
-- **Reference-tool hardening** (from Cloudflare-Glasswing `audit` + Anthropic's dynamic
-  `defending-code-reference-harness`): shape-based hunting + discovery-noisy/verify-strict +
-  severity-from-preconditions + threat-model kill-filter (A); reachability gate, cheap
-  finder→critic→judge adjudicator, schema-per-stage validation + in-session repair, fail-open
-  parsing, salvage, subsystem partitioning (C); variant-hunt loop, git-history mining, bug-chain
-  analysis, logic-chain findings, codify-confirmed-as-semgrep-rule, host-side novelty (B). Durable
-  principles + the optional sandboxed runtime mode recorded in the Go-migration doc.
-- **Context ingestion + control verification** — reads the repo's own docs/specs/runbooks
-  (+ prior scans) into a scan-driving hunt list; C1 verifies claimed controls vs code now and
-  writes MISSING/BYPASSABLE ones as candidate findings, adversary-checked. Docs are untrusted
-  (leads, never a safe-list). Postflight persists what sticks (`prior_context.json`, drift-keyed).
-- ASVS 5.0 + CodeGuard rule-matcher + auto-attached compliance citations on findings.
-- Two-tier attack-class catalog: universal + target-conditional `hunting/` domains
-  (web-protocol/auth, client-side, AI-agent, business-logic, memory-native) + a 12-heuristic
-  methodology and an anti-patterns checklist.
-- Redactor + `verify_no_secrets` helpers for masking secrets before they reach a prompt, and an
-  untrusted-content envelope (`wrap_untrusted`: nonce + marker-neutralization + attribution
-  banner). **Note:** these are helpers the agent prompts instruct agents to use — enforcement is
-  prompt-level, not a code-path gate; wire them into your driver if you need a hard guarantee.
-- Fix disposition (FULL/MITIGATION/WORKAROUND, cross-field-honest) + a fail-closed gate
-  orchestrator + machine-checked crypto policy.
-- **Refactor-resistant finding identity + cross-session FP feedback** (adapted from
-  `@openai/codex-security`) — fingerprints key on the enclosing symbol, not the raw line,
-  so a finding survives line-shift refactors across passes; prior confirmed false positives
-  are recycled into the next pass's investigate/critic prompts as negative examples.
-- **Loop-until-dry discovery + coverage-completeness ledger** — investigate keeps hunting
-  until saturation (`kb/discovery-ledger.json`); a `kb/coverage-ledger.json` records surface
-  dispositions with a machine-checked invariant (`completeness=="complete"` is rejected while
-  any surface is `needs_follow_up`, or `deferred`/`open_questions` is non-empty), rendered in
-  `report.md`. Per-class **proof-tuples** + an instance-preservation rule keep sibling
-  vulnerabilities from being collapsed into one.
-- **Cost accounting** — `cost.py` aggregates per-phase token spend recorded into
-  `CampaignState.budget`; `report.md` shows measured token totals (USD is an opt-in estimate,
-  never presented as measured).
+---
+
+## What you get — the output workspace
+
+Everything lands in `<target>/.sec-harness/<slug>/` (self-ignoring):
+
+```
+kb/scan-profile.json      recon output: languages, frameworks, attack_surface, sast_plan
+kb/architecture.md        components, data flows, trust boundaries (+ kb/entities/*.md)
+kb/THREAT_MODEL.md        attacker profiles + the prioritized hunt list
+kb/context.json           the repo's own docs distilled, trust-tagged
+kb/graph.json             the Tier-1/Tier-2 code graph (reachability substrate)
+kb/gates/<phase>.json     adversary verdict audit trail per gated phase
+kb/coverage-ledger.json   surface-completeness (blocks "complete" while gaps remain)
+kb/discovery-ledger.json  investigate saturation state
+findings/<ID>.json        every finding, all statuses — evidence, reachability, cvss, patch
+report.sarif              SARIF 2.1.0 (confirmed/fixed)
+report.md                 the human report (finding-template structure)
+redteam-plan.md           the manual runtime test plan — the engineer's follow-up
+state.json                campaign state (pass number, pinned SHA, stages)
+MEMORY.md, learnings/     durable per-repo memory across runs
+```
+
+**Resume** an interrupted run: `python -m sec_harness.cli memory --target <T>` reports
+`{finished, resumable, next_phase, stages_done}`.
+
+---
 
 ## Develop
 
+From `helpers/` (stdlib-only core; dev deps pytest/ruff/ty):
+
 ```bash
-cd helpers && uv run pytest -q          # 474 tests
+uv run pytest -q          # ~470 tests (3 env-only failures — see CLAUDE.md §2)
 uv run ruff check sec_harness/ bench/ tests/
 uv run ty check
 ```
 
-Operating manual: `CLAUDE.md` (git protocol, JSON-contract coupling with the Go port,
-environment prerequisites). Full phase-by-phase playbook: `SKILL.md`.
+Two coupling points to respect before editing:
+
+- **The Go port.** `helpers/sec_harness/models.py` and `evidence.py` are a byte-for-byte
+  frozen contract with a parallel Go rewrite under `go/`. Changing a field or the mechanical
+  whitelist breaks the Go build — coordinate first. Never touch `go/`. See [`CLAUDE.md`](CLAUDE.md) §1.
+- **Docs track code.** When you change anything in `agents/`, `helpers/`, or `references/`,
+  update that folder's README in the **same commit**. A pre-commit hook enforces this — see
+  [`CLAUDE.md`](CLAUDE.md) §8.

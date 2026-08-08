@@ -304,4 +304,37 @@ uv run python -m sec_harness.preflight             # tool availability
   tool-receipt safety contract, count-invariant verdict tables) — these are load-bearing, not prose.
 - CLI-callable modules (`python -m sec_harness.<module>`): `cli`, `preflight`, `postflight`,
   `calibrate`, `dedupe`, `verify`, `report`, `redteam`, `bugchain`, `astgrep`, `structural_index`,
-  `citations`, `findings_gate`, `rule_gaps`, `redactor`.
+  `citations`, `findings_gate`, `rule_gaps`, `redactor`, `graph`.
+
+---
+
+## 8. Documentation — READMEs track code (enforced)
+
+Each of the three working folders carries a **human-oriented README** that over-explains what
+lives there and how it works, with mermaid diagrams and worked flows. They are the entry point
+for a person (not just an LLM) trying to understand this codebase — keep them current.
+
+| README | Covers |
+|--------|--------|
+| [`README.md`](README.md) | the map: invariants, architecture, the pipeline, and a full end-to-end **worked example** (one SQLi finding from candidate → confirmed → fixed → redteam-plan). Points at the three folder READMEs and `SKILL.md`. |
+| [`agents/README.md`](agents/README.md) | every LLM prompt: role, model tier (sonnet producer / opus adversary), inputs/outputs, the producer→adversary rule, the investigate gate ladder, and the `classes/` extensions. |
+| [`helpers/README.md`](helpers/README.md) | the ~70 Python modules grouped by job, the CLI-callable list, the deterministic pipeline diagram, the two frozen contracts, and the two in-code invariants. |
+| [`references/README.md`](references/README.md) | the rule book: the 9 `prompt-constants.md` blocks, `attack-classes.md`, the schemas, the crypto-policy YAMLs, and which module/agent consumes each file. |
+
+**Hard rule — docs track code in the same commit.** When you change anything under `agents/`,
+`helpers/`, or `references/`, update that folder's `README.md` in the **same commit**. This is
+enforced by a scoped pre-commit hook at `.githooks/pre-commit`:
+
+```bash
+# one-time, repo-local install (safe for the Go workstream — the hook no-ops
+# on commits that touch nothing under skills/sec-harness/):
+git config core.hooksPath skills/sec-harness/.githooks
+```
+
+The hook only inspects staged files under `skills/sec-harness/{agents,helpers,references}`; it
+never reads, stages, or blocks `go/`. Bypass a genuinely doc-neutral change (e.g. a pure
+formatting pass) with `git commit --no-verify`.
+
+> **Caution when self-testing git flows here:** never run `git stash -u` while these READMEs (or
+> other new untracked files) are unstaged — `-u` sweeps untracked files into the stash and they
+> vanish from the tree until you `stash pop`. Stage or commit first.
