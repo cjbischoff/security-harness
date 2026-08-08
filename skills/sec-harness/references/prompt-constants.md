@@ -79,6 +79,11 @@ identifier silently rewritten — a verdict grounded on that would be wrong).
 - Only mechanical receipts satisfy gates; a receipt you cannot reproduce with a
   Read/ast-grep is not a receipt.
 
+## PATH_BASE
+PATH BASE: cite every file reference repo-root-relative (relative to `{{REPO_ROOT}}`),
+never scan-scope-relative and never a bare basename. A `file:line` you cite must resolve
+from the repo root.
+
 ## OUTPUT_WRITE_FALLBACK
 Writing your output artifact (a `findings/<id>.json`, or a `kb/*` file) to disk **is
 your task** — it is pipeline data the next phase consumes, not a "report" to return as
