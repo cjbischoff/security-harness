@@ -200,9 +200,9 @@ def render_plan(
                    f"{f.risk_score if f.risk_score is not None else '-'} | {f.file}:{f.line} |")
     out += ["", "## Manual test directives", ""]
     if plan:
-        settled = [f for f in plan if f.dataflow and f.preconditions]
+        code_settled = [f for f in plan if f.dataflow and f.preconditions]
         incomplete = [f for f in plan if not (f.dataflow and f.preconditions)]
-        for heading, group in (("Code-settled, runtime-impact-pending", settled),
+        for heading, group in (("Code-settled, runtime-impact-pending", code_settled),
                                ("Verification-incomplete", incomplete)):
             out.append(f"### {heading}")
             out.append("")
