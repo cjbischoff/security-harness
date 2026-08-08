@@ -237,3 +237,29 @@ def test_still_scores_confirmed(tmp_path: Path):
     write_findings(ws, [_f_ndt(id="C-1", severity=Severity.MEDIUM)])
     calibrate_findings(ws)
     assert read_findings(ws)[0].risk_score is not None
+
+
+def test_judge_downgrade_lowers_below_severity_floor(tmp_path: Path):
+    ws = Workspace(tmp_path)
+    ws.ensure()
+    # HIGH severity (floor 6) but 3 strong preconditions drive derived score low,
+    # and the judge said the severity is inflated -> score should follow derived, not the floor.
+    write_findings(ws, [_f_ndt(id="J-1", severity=Severity.HIGH, judge_verdict="severity-inflated",
+                               preconditions=["requires admin", "non-default config", "chained from prior primitive"],
+                               evidence_sources=["semgrep:rule"])])
+    calibrate_findings(ws)
+    f = read_findings(ws)[0]
+    assert f.risk_score is not None
+    assert f.risk_score < 6, "judge severity-inflated must drop below the HIGH floor"
+    assert any(h.get("event") == "calibrate:judge-downgrade-applied" for h in f.history)
+
+
+def test_judge_uphold_does_not_lower(tmp_path: Path):
+    ws = Workspace(tmp_path)
+    ws.ensure()
+    write_findings(ws, [_f_ndt(id="U-1", severity=Severity.HIGH, judge_verdict="uphold",
+                               evidence_sources=["semgrep:rule"])])
+    calibrate_findings(ws)
+    result = read_findings(ws)[0].risk_score
+    assert result is not None
+    assert result >= 6  # floor intact

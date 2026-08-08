@@ -151,6 +151,13 @@ def calibrate_findings(ws: Workspace) -> int:
                 f.risk_score = max(derived, _severity_floor(f.severity))
                 if _is_baseline_standard(f):
                     f.risk_score = min(f.risk_score, _BASELINE_CAP)
+                if f.judge_verdict in ("severity-inflated", "downgrade"):
+                    lowered = min(f.risk_score, derived)  # drop the severity-band floor; never raise
+                    if lowered < f.risk_score:
+                        f.history.append({"event": "calibrate:judge-downgrade-applied",
+                                          "judge_verdict": f.judge_verdict,
+                                          "from": f.risk_score, "to": lowered})
+                        f.risk_score = lowered
                 delta = inflation_delta(f, derived)
                 if delta >= _INFLATION_THRESHOLD and not any(
                     h.get("event") == "calibrate:severity-inflated" for h in f.history
