@@ -32,7 +32,8 @@ the prose never drifts from the data:
   all 9 sections per instance.
 
 ## Triage line (skim layer — render first)
-One row per finding, risk-ordered, real leads (needs-runtime + higher risk) above dep CVEs:
+One row per finding, strictly risk-ordered (by `_risk_sort_key`: risk desc → severity → id) — so
+higher-risk needs-runtime leads surface above lower-risk dep CVEs, without a hard status-first rule:
 `ID · Risk · what (one clause of message) · file:line · status (confirmed | needs-runtime) · next action`.
 A reader opens this first and expands into the detail views below on demand.
 
