@@ -1,9 +1,46 @@
 """Tests for Markdown reporting."""
 
+import json
+from pathlib import Path
+
 from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.patch_status import PatchStatus
 from sec_harness.report import render_finding, select_reportable, to_markdown, write_report
 from sec_harness.workspace import Workspace, write_findings
+
+
+def _f_new(fid, status, cls="authz", sev=Severity.MEDIUM):
+    """Build a minimal Finding for Task-2 integration tests."""
+    return Finding(id=fid, rule_id="r", cls=cls, status=status, severity=sev,
+                   file="a.py", line=1, message="m", evidence_sources=["semgrep:x"])
+
+
+def _profile(ws: Workspace, attack_surface: list) -> None:
+    """Write a minimal scan-profile.json so build_coverage_ledger can run."""
+    ws.kb.mkdir(parents=True, exist_ok=True)
+    (ws.kb / "scan-profile.json").write_text(json.dumps({
+        "languages": [], "frameworks": [], "entrypoints": [], "runnable": False,
+        "attack_surface": attack_surface, "sast_plan": {}, "agents_to_spawn": attack_surface,
+        "budget_hint": {}}))
+
+
+def test_findings_json_includes_ndt(tmp_path: Path):
+    ws = Workspace(tmp_path); ws.ensure(); _profile(ws, ["authz"])
+    write_findings(ws, [_f_new("C-1", FindingStatus.CONFIRMED),
+                        _f_new("N-1", FindingStatus.NEEDS_DEPLOYMENT_TESTING)])
+    write_report(ws)
+    ids = {f["id"]: f["status"] for f in json.loads(ws.findings_json_path.read_text())}
+    assert ids["C-1"] == "confirmed"
+    assert ids["N-1"] == "needs-deployment-testing"  # NDT now present
+
+
+def test_report_auto_builds_coverage_ledger_and_shows_gap(tmp_path: Path):
+    ws = Workspace(tmp_path); ws.ensure(); _profile(ws, ["authz", "sqli"])
+    write_findings(ws, [_f_new("C-1", FindingStatus.CONFIRMED, cls="authz")])  # sqli uncovered
+    write_report(ws)
+    assert (ws.kb / "coverage-ledger.json").exists()
+    assert "Coverage completeness" in ws.report_path.read_text()
+    assert json.loads((ws.kb / "coverage-ledger.json").read_text())["completeness"] == "partial"
 
 
 def _f(id_, sev, cls="sqli"):
