@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from pathlib import Path
+
 from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.partition import partition_candidates_by_class
 from sec_harness.workspace import Workspace, write_findings
@@ -117,6 +121,14 @@ def test_reconcile_plan_skips_class_with_no_live_candidates(tmp_path):
     write_findings(ws, [c("C-1", "ssrf", FindingStatus.CONFIRMED)])   # settled, no live candidates
     out = reconcile_plan(ws, ["authz"])
     assert "ssrf" not in out   # already-settled class not re-routed on a multi-pass run
+
+
+def test_reconcile_plan_dedupes_input(tmp_path: Path):
+    from sec_harness.partition import reconcile_plan
+    from sec_harness.workspace import Workspace
+    ws = Workspace(tmp_path); ws.ensure()  # no candidates -> no extras
+    out = reconcile_plan(ws, ["authz", "secrets", "authz"])
+    assert out == ["authz", "secrets"], "duplicate planned class must appear once"
 
 
 def test_must_investigate_true_when_classes_exist_even_at_zero_candidates():

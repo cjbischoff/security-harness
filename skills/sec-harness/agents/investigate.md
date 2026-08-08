@@ -160,6 +160,7 @@ Write each finding as JSON to `{{WORKSPACE}}/findings/<id>.json` matching this s
 
 - `severity` MUST be one of exactly: `info`, `low`, `medium`, `high`, `critical`.
   `informational` is NOT valid and will crash the reader.
+  severity ∈ {info,low,medium,high,critical}; disposition like `needs-deployment-testing` goes in `status`, never `severity`.
 - New findings you discover use a class-prefixed id: `{{ATTACK_CLASS uppercased}}-0001`,
   `-0002`, ... (e.g. `SQLI-0001`). This guarantees no collision with other
   parallel class agents. Existing candidate findings are updated in place by
