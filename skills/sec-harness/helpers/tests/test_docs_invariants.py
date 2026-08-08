@@ -34,3 +34,14 @@ def test_cross_repo_adversary_prompt_exists_and_carries_rules():
     assert "tool receipt" in txt or "mechanical" in txt
     assert "weaken" in txt or "demote" in txt  # reasoning-only can only weaken/demote
     assert "promote" in txt
+
+
+def test_correlate_combiner_prompt_exists_and_carries_rules():
+    p = Path(__file__).resolve().parents[2] / "agents" / "correlate-combiner.md"
+    txt = p.read_text().lower()
+    assert "narrative" in txt                        # fills narrative markers only
+    assert "must not" in txt and ("mermaid" in txt or "diagram" in txt)  # don't touch diagrams
+    assert "evidence_chain" in txt or "evidence chain" in txt            # cite provenance
+    assert "$shell_var" in txt or "shell_var" in txt or "never" in txt   # no literal secrets
+    for slot in ("architecture", "threat_model", "redteam", "findings"):
+        assert slot in txt.replace("-", "_")         # names the four docs
