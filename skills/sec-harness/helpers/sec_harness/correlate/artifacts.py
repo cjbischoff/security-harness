@@ -66,7 +66,7 @@ def build_artifacts(
 
     Args:
         manifest: The product manifest.
-        ings: All ingested findings.
+        ings: All ingested findings (drives the per-member finding summary in FINDINGS.md).
         edges: All cross-repo edges.
         verdicts: All correlation verdicts.
 
@@ -74,7 +74,7 @@ def build_artifacts(
         ``{filename: markdown}`` for ARCHITECTURE / THREAT_MODEL / REDTEAM / FINDINGS.
     """
     roster = _table(
-        ["member", "role", "repo_root"],
+        ["member_key", "role", "repo_root"],
         sorted([[m.member_key, m.role, m.repo_root] for m in manifest.members]),
     )
     arch = (
@@ -88,7 +88,7 @@ def build_artifacts(
 
     span_rows = sorted(
         [
-            [v.finding_ref, v.correlated_status, "; ".join(v.evidence_chain)]
+            [v.finding_ref, v.correlated_status, "; ".join(sorted(v.evidence_chain))]
             for v in verdicts
             if v.direction in ("promote", "weaken", "demote")
         ]
@@ -104,7 +104,7 @@ def build_artifacts(
 
     rt_rows = sorted(
         [
-            [v.finding_ref, v.direction, "; ".join(v.evidence_chain)]
+            [v.finding_ref, v.direction, "; ".join(sorted(v.evidence_chain))]
             for v in verdicts
             if v.direction in ("promote", "weaken")
         ]
@@ -123,9 +123,26 @@ def build_artifacts(
     cve_rows = sorted(
         [[e.key, ", ".join(sorted(e.members))] for e in edges if e.type == "shared-dependency"]
     )
+    summary: dict[str, dict[str, int]] = {}
+    for i in ings:
+        counts = summary.setdefault(i.member_key, {"confirmed": 0, "needs-deployment-testing": 0})
+        status = i.finding.status.value
+        if status in counts:
+            counts[status] += 1
+    member_rows = [
+        [
+            mk,
+            str(c["confirmed"]),
+            str(c["needs-deployment-testing"]),
+            str(c["confirmed"] + c["needs-deployment-testing"]),
+        ]
+        for mk, c in sorted(summary.items())
+    ]
     findings = (
         f"# {manifest.product} — Correlated Findings\n\n## Verdicts\n\n"
         + _table(["direction", "finding", "base_status", "correlated_status"], verdict_rows)
+        + "\n## Per-member finding summary\n\n"
+        + _table(["member", "confirmed", "needs-deployment-testing", "total"], member_rows)
         + "\n## Coverage gaps (enforcer repo not ingested)\n\n"
         + _table(["finding"], gap_rows)
         + "\n## Shared dependency vulnerabilities\n\n"
@@ -148,6 +165,9 @@ def write_artifacts(cw: CorrelationWorkspace, docs: dict[str, str]) -> None:
     Args:
         cw: The correlation workspace.
         docs: ``{filename: markdown}`` from :func:`build_artifacts`.
+
+    Raises:
+        FileNotFoundError: If cw.artifacts_dir does not exist (call cw.ensure() first).
     """
     for name, text in sorted(docs.items()):
         (cw.artifacts_dir / name).write_text(text)

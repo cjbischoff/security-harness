@@ -1,8 +1,17 @@
 from sec_harness.correlate.artifacts import build_artifacts, write_artifacts
 from sec_harness.correlate.edges import Edge
+from sec_harness.correlate.ingest import IngestedFinding
 from sec_harness.correlate.manifest import Manifest, Member
 from sec_harness.correlate.rethreshold import CorrelationVerdict
 from sec_harness.correlate.workspace import CorrelationWorkspace
+from sec_harness.models import Finding, FindingStatus, Severity
+
+
+def _ing():
+    f = Finding(id="a", rule_id="r", cls="c", status=FindingStatus.CONFIRMED,
+                severity=Severity.HIGH, file="a", line=1, message="m")
+    return IngestedFinding(member_key="rbac#.", role="rbac-source",
+                           cross_repo_id="rbac#.:a:1:r", finding=f)
 
 
 def _inputs():
@@ -17,7 +26,7 @@ def _inputs():
     gap = CorrelationVerdict(finding_ref="rbac#.:b:2:r", base_status="needs-deployment-testing",
                              correlated_status="needs-deployment-testing", direction="coverage-gap",
                              edge=None, evidence_chain=[], confidence="low")
-    return m, [], edges, [promoted, gap]
+    return m, [_ing()], edges, [promoted, gap]
 
 
 def test_build_artifacts_has_four_docs_with_diagrams_and_markers():
@@ -35,6 +44,12 @@ def test_findings_lists_coverage_gap_and_shared_cve():
     assert "rbac#.:b:2:r" in docs["FINDINGS.md"]      # coverage-gap finding listed
     assert "GHSA-1" in docs["FINDINGS.md"]            # shared-CVE rollup
     assert "rbac#.:a:1:r" in docs["REDTEAM.md"]       # promote directive present
+
+
+def test_findings_has_per_member_summary():
+    docs = build_artifacts(*_inputs())
+    summary = docs["FINDINGS.md"].split("## Per-member finding summary")[1]
+    assert "rbac#." in summary and "| rbac#. | 1 |" in summary  # member_key + confirmed count
 
 
 def test_write_artifacts_writes_under_artifacts_dir(tmp_path):
