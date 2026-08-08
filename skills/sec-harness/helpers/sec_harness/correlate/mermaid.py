@@ -52,9 +52,10 @@ def component_graph(manifest: Manifest, edges: list[Edge]) -> str:
         mem = sorted(e.members)
         if len(mem) < 2:
             continue
-        a, b = _node_id(mem[0]), _node_id(mem[1])
         if e.type == "control-enforces":
-            links.append(f"  {a} -->|{e.key}| {b}")
+            for i in range(len(mem) - 1):
+                x, y = _node_id(mem[i]), _node_id(mem[i + 1])
+                links.append(f"  {x} -->|{e.key}| {y}")
         elif e.type == "shared-dependency":
             for i in range(len(mem) - 1):
                 x, y = _node_id(mem[i]), _node_id(mem[i + 1])
