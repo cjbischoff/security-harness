@@ -254,15 +254,17 @@ def claims_from_context(ctx) -> list[dict]:
 
 
 _MD_CITATION = re.compile(
-    r"\b([\w./-]+\.(?:py|js|ts|tsx|jsx|go|java|rb|php|c|cc|cpp|rs)):(\d+)\b"
+    r"([\w./-]+\.(?:py|js|ts|tsx|jsx|go|java|rb|php|c|cc|cpp|rs|"
+    r"yaml|yml|tf|hcl|tpl|json|sh|puml|dot)):(\d+(?:-\d+)?)"
 )
 
 
 def claims_from_markdown(text: str) -> list[dict]:
-    """Extract gate claims from genuine ``path.ext:line`` citations in free-text markdown.
+    """Extract gate claims from ``path.ext:line`` / ``path.ext:start-end`` citations.
 
-    Prose file mentions (a bare filename, a README reference) are not claims —
-    only citations with a code extension and an explicit line number count.
+    Recognizes code AND IaC/config/diagram extensions and single-line or range citations
+    (a range anchors on its start line). Backtick-wrapped citations are captured (the regex
+    is not backtick-anchored). Prose file mentions without a line number are not claims.
 
     Args:
         text: Markdown/free-text content to scan.
@@ -274,8 +276,9 @@ def claims_from_markdown(text: str) -> list[dict]:
     for line in text.splitlines():
         for m in _MD_CITATION.finditer(line):
             path, lineno = m.group(1), m.group(2)
+            start = lineno.split("-", 1)[0]
             claims.append({"id": f"md-{len(claims)}", "text": line.strip(),
-                           "refs": [f"{path}:{lineno}"]})
+                           "refs": [f"{path}:{start}"]})
     return claims
 
 

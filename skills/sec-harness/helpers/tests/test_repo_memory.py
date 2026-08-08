@@ -1,6 +1,9 @@
 """Tests for per-repo persistent scan memory."""
 
+from __future__ import annotations
+
 from datetime import date
+from pathlib import Path
 
 from sec_harness.campaign import record_stage
 from sec_harness.repo_memory import PHASES, RepoMemory, memory_root, repo_slug
@@ -96,3 +99,37 @@ def test_update_status_rewrites_block(tmp_path):
     m.update_status()
     txt = m.index_path.read_text()
     assert "IN PROGRESS" in txt and "shaX" in txt and "## Learnings log" in txt
+
+
+def _origin(url: str, toplevel: str | None = None):
+    def runner(cmd, *, capture_output=True, text=True, check=False):
+        class R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        if "remote" in cmd and "get-url" in cmd:
+            R.stdout = url + "\n"
+        elif "rev-parse" in cmd and "--show-toplevel" in cmd:
+            R.stdout = (toplevel or "") + "\n"
+        return R()
+    return runner
+
+
+def test_monorepo_subdirs_get_distinct_slugs(tmp_path: Path):
+    repo = tmp_path / "mono"
+    (repo / "internal" / "svcA").mkdir(parents=True)
+    (repo / "internal" / "svcB").mkdir(parents=True)
+    url = "git@github.com:org/mono.git"
+    a = repo_slug(repo / "internal" / "svcA", runner=_origin(url, str(repo)))
+    b = repo_slug(repo / "internal" / "svcB", runner=_origin(url, str(repo)))
+    assert a != b, "monorepo sub-services must not collide"
+
+
+def test_whole_repo_slug_stable(tmp_path: Path):
+    repo = tmp_path / "solo"
+    repo.mkdir()
+    url = "git@github.com:org/solo.git"
+    s1 = repo_slug(repo, runner=_origin(url, str(repo)))
+    s2 = repo_slug(repo, runner=_origin(url, str(repo)))
+    assert s1 == s2
+    assert s1.startswith("solo-")

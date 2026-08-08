@@ -178,3 +178,24 @@ def test_gate_decision_and_record_carry_claim_content(tmp_path):
     # the sent-to-adversary claim's text+refs are recoverable from the record (O-004)
     assert rec["claims"]["ep-0"] == {"text": "entrypoint handler foo", "refs": ["a.py"]}
     assert rec["decisions"][0]["text"] == "entrypoint handler foo"
+
+
+def test_extracts_terraform_range_citation():
+    from sec_harness.phase_gate import claims_from_markdown
+    claims = claims_from_markdown("The role at `infra/azure/main.tf:150-159` is over-scoped.")
+    refs = [r for c in claims for r in c["refs"]]
+    assert "infra/azure/main.tf:150" in refs  # range anchors on start line
+
+
+def test_extracts_yaml_citation():
+    from sec_harness.phase_gate import claims_from_markdown
+    claims = claims_from_markdown("DB_SSLMODE=disable at charts/x/responder.yaml:132")
+    refs = [r for c in claims for r in c["refs"]]
+    assert "charts/x/responder.yaml:132" in refs
+
+
+def test_still_extracts_go_citation():
+    from sec_harness.phase_gate import claims_from_markdown
+    claims = claims_from_markdown("`internal/svc/events.go:39` reads Envelope.Source")
+    refs = [r for c in claims for r in c["refs"]]
+    assert "internal/svc/events.go:39" in refs

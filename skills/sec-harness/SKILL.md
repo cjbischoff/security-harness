@@ -74,9 +74,13 @@ absolute path to `skills/sec-harness/helpers`); agent steps spawn a subagent wit
 named prompt (tokens substituted). Prompts use path tokens, never repo-root-relative
 paths, so a subagent reads the right file regardless of its CWD — substitute **all** of
 these before spawning: `{{TARGET}}`, `{{WORKSPACE}}`, `{{ATTACK_CLASS}}`, `{{PHASE}}`,
-`{{ROUND}}`, and the two path anchors `{{HARNESS_ROOT}}` (absolute path to
+`{{ROUND}}`, the two path anchors `{{HARNESS_ROOT}}` (absolute path to
 `skills/sec-harness/`) and `{{HELPERS_DIR}}` (absolute path to
-`skills/sec-harness/helpers`). Record each phase with `record_stage(<WS>, "<phase>")` so
+`skills/sec-harness/helpers`), and the two scope anchors `{{REPO_ROOT}}` (absolute
+git top-level of the scanned repo, read from `kb/scan-scope.json`) and `{{SCAN_SCOPE}}`
+(the audit target path relative to `{{REPO_ROOT}}`, also from `kb/scan-scope.json`).
+All agents cite paths **repo-root-relative**; all gates/dedupe/verify resolve against
+`{{REPO_ROOT}}` (read from `kb/scan-scope.json`). Record each phase with `record_stage(<WS>, "<phase>")` so
 passes advance. Persist each agent's final return with
 `workspace.record_agent_return(ws, "<agent-label>", <text>)` (→ `runs/<agent>.txt`) and
 read it back with `read_agent_return` — never depend on a subagent's summary message

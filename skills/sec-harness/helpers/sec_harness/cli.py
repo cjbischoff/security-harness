@@ -8,11 +8,39 @@ import json
 from sec_harness.campaign import record_stage
 from sec_harness.models import Finding
 from sec_harness.normalize import normalize
-from sec_harness.repo_memory import RepoMemory
+from sec_harness.repo_memory import RepoMemory, repo_slug
 from sec_harness.report import to_markdown
 from sec_harness.sarif import to_sarif
 from sec_harness.sast import run_semgrep
+from sec_harness.scanscope import resolve as _resolve_scope
+from sec_harness.scanscope import write_scope
 from sec_harness.workspace import Workspace, load_paths, write_findings
+
+
+def write_scan_scope(ws, target, *, sha: str = "", runner=None):
+    """Resolve + persist the canonical ScanScope for a scan (called at pass start).
+
+    Args:
+        ws: Campaign workspace.
+        target: The scan target path.
+        sha: Pinned git SHA for the pass.
+        runner: Injectable subprocess runner (tests); defaults to subprocess.run.
+
+    Returns:
+        The persisted :class:`sec_harness.scanscope.ScanScope`.
+    """
+    import subprocess
+    _raw = runner or subprocess.run
+
+    def r(cmd, **kwargs):
+        # ponytail: adapt list→str so test fakes using `"show-toplevel" in cmd`
+        # (substring check) work correctly; subprocess.run accepts both forms.
+        return _raw(" ".join(cmd) if (runner and isinstance(cmd, list)) else cmd, **kwargs)
+
+    scope = _resolve_scope(target, sha=sha, runner=r)
+    scope.slug = repo_slug(target, runner=r)
+    write_scope(ws, scope)
+    return scope
 
 
 def run_scan(
@@ -90,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
             memory = RepoMemory.for_target(args.target)
             memory.ensure(target=args.target)
             ws = memory.workspace
+        write_scan_scope(ws, args.target, sha=args.sha or "")
         findings = run_scan(args.target, ws, args.config, sha=args.sha)
         if memory is not None:
             memory.update_status()
