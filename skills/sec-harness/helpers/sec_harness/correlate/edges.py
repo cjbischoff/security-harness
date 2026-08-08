@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -118,3 +119,53 @@ def write_edges(path: str | Path, edges: list[Edge]) -> None:
         edges: List of edges to serialize.
     """
     Path(path).write_text(json.dumps([e.to_dict() for e in edges], indent=2))
+
+
+_QUOTED = re.compile(r"['\"]([^'\"]{3,80})['\"]")
+
+
+def _privilege_tokens(f: IngestedFinding) -> set[str]:
+    """Extract candidate privilege/permission tokens from a finding (deterministic, no source).
+
+    Tokens are quoted substrings in the message plus a permission-shaped ``rule_id`` (one that
+    contains a space or a colon). Lowercased and stripped; short/empty tokens dropped.
+
+    Args:
+        f: The ingested finding.
+
+    Returns:
+        A set of privilege/permission token strings, lowercased, with length >= 3.
+    """
+    toks = {m.group(1).strip().lower() for m in _QUOTED.finditer(f.finding.message or "")}
+    if f.finding.rule_id and (" " in f.finding.rule_id or ":" in f.finding.rule_id):
+        toks.add(f.finding.rule_id.strip().lower())
+    return {t for t in toks if len(t) >= 3}
+
+
+def control_enforces_edges(ings: list[IngestedFinding]) -> list[Edge]:
+    """Join a privilege token shared by an rbac-source finding and a service-enforcer finding.
+
+    Args:
+        ings: All ingested findings (each carries its member role).
+
+    Returns:
+        One ``control-enforces`` edge per token present in BOTH an ``rbac-source`` member finding
+        and a ``service-enforcer`` member finding, sorted by key. ``join="deterministic"``.
+    """
+    rbac: dict[str, IngestedFinding] = {}
+    svc: dict[str, IngestedFinding] = {}
+    for i in ings:
+        if i.role == "rbac-source":
+            for t in _privilege_tokens(i):
+                rbac.setdefault(t, i)
+        elif i.role == "service-enforcer":
+            for t in _privilege_tokens(i):
+                svc.setdefault(t, i)
+    edges = []
+    for tok in sorted(set(rbac) & set(svc)):
+        a, b = rbac[tok], svc[tok]
+        edges.append(Edge(type="control-enforces", members=[a.member_key, b.member_key], key=tok,
+                          detail={"join": "deterministic", "from": a.cross_repo_id,
+                                  "to": b.cross_repo_id, "to_status": b.finding.status.value,
+                                  "to_cls": b.finding.cls}))
+    return edges
