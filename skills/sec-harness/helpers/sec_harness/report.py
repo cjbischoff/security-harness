@@ -209,8 +209,9 @@ def write_report(ws: Workspace, *, target: str | None = None) -> dict:
     """Assemble the final SARIF + Markdown report from a workspace's findings.
 
     Overwrites ``report.sarif``, ``report.md``, and ``findings.json`` so they
-    reflect the finished analysis (confirmed/fixed findings) rather than
-    prefilter-time candidates.
+    reflect the finished analysis rather than prefilter-time candidates.
+    ``findings.json`` carries confirmed/fixed findings plus needs-deployment-testing
+    findings (distinguished by status); SARIF carries confirmed/fixed only.
 
     Args:
         ws: Workspace to read findings from and write reports into.

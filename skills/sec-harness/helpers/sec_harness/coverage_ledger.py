@@ -40,7 +40,9 @@ def build_coverage_ledger(ws: Workspace) -> dict:
     """
     prof_path = ws.kb / "scan-profile.json"
     if not prof_path.exists():
-        ledger: dict = {"completeness": "unknown", "surfaces": [], "deferred": [], "open_questions": []}
+        ledger: dict = {
+            "completeness": "unknown", "surfaces": [], "deferred": [], "open_questions": [],
+        }
         ws.kb.mkdir(parents=True, exist_ok=True)
         (ws.kb / "coverage-ledger.json").write_text(json.dumps(ledger, indent=2))
         return ledger
@@ -54,9 +56,10 @@ def build_coverage_ledger(ws: Workspace) -> dict:
         statuses = by_cls.get(cls, [])
         if any(s in _REPORTED for s in statuses):
             disp = "reported"
-        elif statuses:
+        elif statuses and all(s in _SETTLED_NO_ISSUE for s in statuses):
             disp = "no_issue_found"
         else:
+            # no findings, or non-terminal statuses (RAW/CANDIDATE/STALE/DUPLICATE) remain
             disp = "needs_follow_up"
         surfaces.append({"id": cls, "disposition": disp})
     completeness = (
