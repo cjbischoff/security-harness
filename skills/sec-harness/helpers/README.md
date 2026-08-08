@@ -154,7 +154,7 @@ interrupted run can resume, and multi-pass campaigns know what's already done.
 ### Reporting
 | Module | Purpose |
 |--------|---------|
-| `report.py` | Assemble the final `report.sarif` + `report.md`. Structure: bottom-line count block (confirmed crit/high/med/low + NDT count, never merged) → risk-ordered `## Triage` table (`_triage_row`: id/risk/what/location/status/action) → `## Needs runtime proof — the real leads` (NDT via `render_ndt`, foregrounded above confirmed) → `## Confirmed (source-provable)` (via `render_finding`; deps get dep-view, condensed medium/low numbered 1–4 with no gaps) → coverage/redteam-link/ledger/token-spend tail. NDT is never counted as confirmed. CLI-callable. |
+| `report.py` | Assemble the final `report.sarif` + `report.md`. Structure: bottom-line count block (confirmed crit/high/med/low + NDT count, never merged) → risk-ordered `## Triage` table (`_triage_row`: id/risk/what/location/status/action; the `what` clip splits on period-space so semver like `decompress@4.2.1` survives) → `## Needs runtime proof — the real leads` (NDT via `render_ndt`, foregrounded above confirmed) → `## Confirmed (source-provable)` (via `render_finding`; deps get dep-view, condensed medium/low numbered 1–4 with no gaps) → coverage/redteam-link/ledger/token-spend tail. NDT is never counted as confirmed. `_risk_sort_key` (risk desc → severity → id) orders triage, confirmed, NDT, and `select_reportable` identically. CLI-callable. |
 | `sarif.py` | Emit valid SARIF 2.1.0; map severity → SARIF level. |
 
 ### Campaign, state & per-repo memory

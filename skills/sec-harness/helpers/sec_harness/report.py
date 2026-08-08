@@ -18,6 +18,22 @@ from sec_harness.workspace import Workspace, load_paths, read_findings
 
 _ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 _REPORTABLE = {FindingStatus.CONFIRMED, FindingStatus.FIXED}
+
+
+def _risk_sort_key(f: Finding) -> tuple[int, int, str]:
+    """Deterministic finding order: risk descending, then severity, then id.
+
+    Used to order both the confirmed and needs-runtime lists and the triage
+    table so direct callers (e.g. :func:`select_reportable`) and the report body
+    agree. Findings with no ``risk_score`` fall back to severity order.
+
+    Args:
+        f: The finding to key.
+
+    Returns:
+        A ``(-risk, severity_rank, id)`` sort tuple.
+    """
+    return (-(f.risk_score or 0), _ORDER.get(f.severity.value, 9), f.id)
 # Full template for these tiers; condensed (Summary/Mechanism/Severity/Fix) below.
 _FULL_TIERS = {"critical", "high"}
 
@@ -169,7 +185,7 @@ def _triage_row(f: Finding, status_label: str, action: str) -> str:
     Returns:
         A single Markdown table row string (pipe-delimited).
     """
-    what = (f.message or "").split("|", 1)[0].split(".")[0].strip()[:80]
+    what = (f.message or "").split("|", 1)[0].split(". ")[0].strip()[:80]
     risk = f.risk_score if f.risk_score is not None else "-"
     return f"| {f.id} | {risk} | {what} | {f.file}:{f.line} | {status_label} | {action} |"
 
@@ -204,11 +220,8 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
     Returns:
         A Markdown report string.
     """
-    def _sort_key(f: Finding) -> tuple[int, int, str]:
-        return (-(f.risk_score or 0), _ORDER.get(f.severity.value, 9), f.id)
-
-    ndt = sorted(needs_deployment or [], key=_sort_key)
-    conf = sorted(findings, key=_sort_key)
+    ndt = sorted(needs_deployment or [], key=_risk_sort_key)
+    conf = sorted(findings, key=_risk_sort_key)
 
     # Bottom line — confirmed counts exclude NDT entirely (epistemic honesty)
     conf_counts = Counter(f.severity.value for f in findings)
@@ -238,7 +251,7 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
         + [(f, "confirmed",
             "bump" if f.cls == "deps" else "apply fix (§ below)") for f in conf]
     )
-    all_triage.sort(key=lambda t: _sort_key(t[0]))
+    all_triage.sort(key=lambda t: _risk_sort_key(t[0]))
     lines += [
         "## Triage", "",
         "| ID | Risk | What | Location | Status | Next action |",
@@ -286,8 +299,9 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
 def select_reportable(findings: list[Finding]) -> list[Finding]:
     """Select findings suitable for the final report.
 
-    Keeps only ``CONFIRMED``/``FIXED`` findings, sorted by descending risk score
-    (missing score treated as 0), then id.
+    Keeps only ``CONFIRMED``/``FIXED`` findings, ordered by :func:`_risk_sort_key`
+    (risk descending, then severity, then id) so the reportable order matches the
+    report body's triage/confirmed ordering.
 
     Args:
         findings: All findings in the workspace.
@@ -296,7 +310,7 @@ def select_reportable(findings: list[Finding]) -> list[Finding]:
         The reportable subset, highest-risk first.
     """
     reportable = [f for f in findings if f.status in _REPORTABLE]
-    return sorted(reportable, key=lambda f: (-(f.risk_score or 0), f.id))
+    return sorted(reportable, key=_risk_sort_key)
 
 
 def write_report(ws: Workspace, *, target: str | None = None) -> dict:

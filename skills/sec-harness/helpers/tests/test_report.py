@@ -79,7 +79,7 @@ def test_to_markdown_shows_risk_and_verification():
     # Risk appears in the triage table header; verification in the detailed section.
     md = to_markdown([_rf("F-0002", FindingStatus.FIXED, risk=9, verification="verified-static")])
     assert "Risk" in md
-    assert "9" in md
+    assert "| 9 |" in md          # Risk column in the triage table
     assert "verified-static" in md
 
 
@@ -405,8 +405,8 @@ def test_to_markdown_bottom_line_counts_ndt_separately():
     assert "Needs runtime proof: 1" in out                 # NDT counted, not hidden
     # confirmed count line must not include the NDT medium finding
     conf_line = next(l for l in out.splitlines() if l.startswith("Confirmed:"))
-    # confirmed has 1 low dep; medium bucket must be 0 (NDT not folded in)
-    assert "0/0/0/1" in conf_line or ("med" not in conf_line.lower())
+    # confirmed = 0 crit/high/med, 1 low; NDT medium NOT folded into the medium bucket
+    assert "0/0/0/1" in conf_line
 
 
 def test_triage_puts_ndt_lead_above_low_dep():
@@ -417,3 +417,12 @@ def test_triage_puts_ndt_lead_above_low_dep():
     assert triage.index("NDT-T4") < triage.index("DEP-T4")
     assert "## Needs runtime proof" in out
     assert out.index("## Needs runtime proof") < out.index("## Confirmed")   # leads above confirmed
+
+
+def test_triage_dep_row_preserves_semver_and_advisory():
+    """`what` clip splits on period-space, so `decompress@4.2.1` isn't truncated to `decompress@4`."""
+    out = to_markdown([_confirmed_dep()])
+    triage = out.split("## Triage")[1].split("##")[0]
+    dep_row = next(l for l in triage.splitlines() if "DEP-T4" in l)
+    assert "decompress@4.2.1" in dep_row       # semver intact
+    assert "decompress@4 " not in dep_row      # not clipped at the first bare dot
