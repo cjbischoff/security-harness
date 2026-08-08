@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from sec_harness.correlate.artifacts import build_artifacts, write_artifacts
 from sec_harness.correlate.edges import (
     control_enforces_edges,
     same_class_recurrence_edges,
@@ -16,6 +17,7 @@ from sec_harness.correlate.ingest import ingest, member_coverage
 from sec_harness.correlate.manifest import load_manifest
 from sec_harness.correlate.rethreshold import rethreshold, write_verdicts
 from sec_harness.correlate.workspace import CorrelationWorkspace
+from sec_harness.correlate.xrepo_sarif import to_correlation_sarif
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,7 +44,21 @@ def main(argv: list[str] | None = None) -> int:
     coverage = member_coverage(manifest)
     verdicts = rethreshold(ings, edges, coverage)
     write_verdicts(cw.verdicts_path, verdicts)
-    print(json.dumps({"edges": len(edges), "members": len(manifest.members), "verdicts": len(verdicts)}))
+    docs = build_artifacts(manifest, ings, edges, verdicts)
+    write_artifacts(cw, docs)
+    (cw.artifacts_dir / "report.sarif").write_text(
+        json.dumps(to_correlation_sarif(ings, verdicts), indent=2)
+    )
+    print(
+        json.dumps(
+            {
+                "edges": len(edges),
+                "members": len(manifest.members),
+                "verdicts": len(verdicts),
+                "artifacts": len(docs),
+            }
+        )
+    )
     return 0
 
 
