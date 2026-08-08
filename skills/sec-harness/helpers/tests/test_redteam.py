@@ -70,6 +70,22 @@ def test_render_plan_empty():
     assert "No confirmed finding requires runtime validation" in md
 
 
+def test_static_settled_footer_counts_static_not_runtime_subset():
+    # Regression: the footer must report the static_settled count, not the needs-runtime
+    # code-settled subset (a rebind of `settled` inside the plan block clobbered the count).
+    plan_f = _f("P", disposition="needs-runtime", risk=9)
+    plan_f.dataflow = ["a -> b"]
+    plan_f.preconditions = ["needs deploy"]
+    findings = [
+        plan_f,
+        _f("S1", disposition="static-settled", risk=9),
+        _f("S2", disposition="static-settled", risk=8),
+    ]
+    d = discriminate(findings, min_risk=7)
+    md = render_plan(d, min_risk=7)
+    assert "2 confirmed finding(s) are source-provable" in md   # S1+S2, not the 1 runtime item
+
+
 def test_write_plan(tmp_path):
     ws = Workspace(tmp_path)
     ws.ensure()
