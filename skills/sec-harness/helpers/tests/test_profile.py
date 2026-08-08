@@ -1,6 +1,7 @@
 """Tests for the ScanProfile model."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -25,6 +26,7 @@ def _valid_dict():
         "notes": {},
         "subsystems": [],
         "attack_surface_evidence": {},
+        "scan_options": {},
     }
 
 
@@ -73,6 +75,31 @@ def test_golden_profile_validates():
     golden = Path(__file__).parent.parent / "fixtures" / "golden_scan_profile.json"
     d = json.loads(golden.read_text())
     assert validate_profile(d) == []
+
+
+def _base(**kw) -> dict:
+    d = {"languages": [], "frameworks": [], "entrypoints": [], "runnable": False,
+         "attack_surface": [], "sast_plan": {}, "agents_to_spawn": [], "budget_hint": {}}
+    d.update(kw)
+    return d
+
+
+def test_scan_options_roundtrips(tmp_path: Path):
+    p = tmp_path / "sp.json"
+    save_profile(p, ScanProfile(scan_options={"adversary_depth": "gate-by-exception",
+                                              "wave_k": 3, "token_budget": 500000}))
+    prof = load_profile(p)
+    assert prof.scan_options["adversary_depth"] == "gate-by-exception"
+    assert prof.scan_options["wave_k"] == 3
+
+
+def test_absent_scan_options_defaults_empty(tmp_path):
+    p = tmp_path / "sp.json"; p.write_text(json.dumps(_base()))
+    assert load_profile(p).scan_options == {}
+
+
+def test_non_dict_scan_options_rejected():
+    assert any("scan_options" in e for e in validate_profile(_base(scan_options=["x"])))
 
 
 def test_profile_notes_roundtrip_and_optional(tmp_path):

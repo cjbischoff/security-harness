@@ -37,6 +37,10 @@ class ScanProfile:
             indicators that justified including it, so the phase gate can challenge
             unevidenced classes. Optional; an absent or empty entry routes to
             adversary judgment rather than auto-rejecting.
+        scan_options: Optional process knobs the orchestrator reads: ``adversary_depth``
+            (``full`` | ``gate-by-exception``), ``model_tier_map`` (phase→tier),
+            ``wave_k``/``max_waves`` (investigate saturation), ``token_budget``.
+            Never required; absent ⇒ full depth + defaults.
     """
 
     languages: list[str] = field(default_factory=list)
@@ -50,6 +54,7 @@ class ScanProfile:
     notes: dict = field(default_factory=dict)
     subsystems: list[dict] = field(default_factory=list)
     attack_surface_evidence: dict[str, list[str]] = field(default_factory=dict)
+    scan_options: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-safe dict."""
@@ -63,6 +68,7 @@ class ScanProfile:
 
 _LIST_STR_FIELDS = ("languages", "frameworks", "entrypoints", "attack_surface", "agents_to_spawn")
 _DICT_FIELDS = ("sast_plan", "budget_hint")
+_OPTIONAL_DICT_FIELDS = ("scan_options",)
 _REQUIRED = (*_LIST_STR_FIELDS, "runnable", *_DICT_FIELDS)
 
 
@@ -86,6 +92,9 @@ def validate_profile(d: dict) -> list[str]:
     if "runnable" in d and not isinstance(d["runnable"], bool):
         errors.append("field runnable must be a boolean")
     for key in _DICT_FIELDS:
+        if key in d and not isinstance(d[key], dict):
+            errors.append(f"field {key} must be an object")
+    for key in _OPTIONAL_DICT_FIELDS:
         if key in d and not isinstance(d[key], dict):
             errors.append(f"field {key} must be an object")
     return errors

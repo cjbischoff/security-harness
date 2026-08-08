@@ -12,6 +12,17 @@
     "sast_plan": {"type": "object"},
     "agents_to_spawn": {"type": "array", "items": {"type": "string"}},
     "budget_hint": {"type": "object"},
-    "notes": {"type": "object", "description": "Optional free-form signals (e.g. {\"eol_frameworks\": [...]}); never required."}
+    "notes": {"type": "object", "description": "Optional free-form signals (e.g. {\"eol_frameworks\": [...]}); never required."},
+    "scan_options": {
+      "type": "object",
+      "description": "Optional process knobs the orchestrator reads. Never required; absent => full depth + defaults.",
+      "properties": {
+        "adversary_depth": {"type": "string", "enum": ["full", "gate-by-exception"]},
+        "model_tier_map": {"type": "object", "description": "Maps phase name to model tier."},
+        "wave_k": {"type": "integer", "description": "Number of investigation slots per wave."},
+        "max_waves": {"type": "integer", "description": "Maximum number of investigation waves."},
+        "token_budget": {"type": "integer", "description": "Token budget cap for the scan."}
+      }
+    }
   }
 }
