@@ -27,20 +27,39 @@ def render_finding(f: Finding, patch_status: PatchStatus | None = None) -> str:
 
     Populated entirely from the Finding JSON fields so the prose never drifts from
     the data. Critical/High get the full 9 sections; Medium/Low get a condensed
-    form (Summary, Mechanism, Severity, Fix). The harness is static-only, so the
-    Confirmation and Attack-Scenario sections are marked as static traces.
+    form (Summary, Mechanism, Severity, Fix). Dependency findings get a purpose-built
+    dep-view (Summary with package@version, advisory, Reachability, Fix). The harness
+    is static-only, so the Confirmation and Attack-Scenario sections are marked as
+    static traces.
 
     Args:
         f: The finding to render.
-        patch_status: Result of :func:`patch_status.check_patch_applied` for this finding's
-            ``patch_diff`` against the real target, if a target was supplied to
-            :func:`write_report`. A ``fixed`` finding not confirmed applied gets a caution
-            note — ``verify.py`` only checks a patch against a throwaway copy, never the
-            real target.
+        patch_status: Result of :func:`patch_status.check_patch_applied` for this
+            finding's ``patch_diff`` against the real target, if a target was supplied
+            to :func:`write_report`. A ``fixed`` finding not confirmed applied gets a
+            caution note — ``verify.py`` only checks a patch against a throwaway copy,
+            never the real target.
 
     Returns:
         A Markdown section string for the finding.
     """
+    # Dep-view: early return for dependency findings.
+    if f.cls == "deps":
+        reach = f.reachability or {}
+        rstate = "reachable" if reach.get("reachable") else "not reachable"
+        blocker = reach.get("blocker") or "—"
+        adv = f.rule_id if f.rule_id.startswith("osv:") else (
+            next((s for s in f.evidence_sources if "osv:" in s), f.rule_id))
+        pkg = (f.evidence or "").strip() or "(package unknown)"
+        out = [f"### {f.id} — deps — {f.severity.value.title()}", "",
+               f"**Package.** `{pkg}` — advisory `{adv}`.  ",
+               f"Location: `{f.file}:{f.line}`.", "",
+               (f"**Reachability.** {rstate} in this repo (blocker: {blocker}). "
+                f"{f.message.split('|', 1)[0].strip()}"), "",
+               (f"**Fix.** Bump `{pkg.split('@')[0]}` to a release that resolves "
+                f"`{adv}`."), ""]
+        return "\n".join(out)
+
     receipts = [s for s in f.evidence_sources if is_tool_receipt(s)]
     claimed = [s for s in f.evidence_sources if not is_tool_receipt(s)]
     flow = "\n".join(f"   - `{hop}`" for hop in (f.dataflow or [])) or "   - (no dataflow recorded)"
@@ -80,8 +99,9 @@ def render_finding(f: Finding, patch_status: PatchStatus | None = None) -> str:
         # §4 Impact
         out += [(f"**4. Impact.** Attack class `{f.cls}`; scope per Summary. Assess CIA "
                  "and whether impact is bounded/scriptable per the template."), ""]
-    # §5 Severity
-    out += [("**5. Severity Rationale.** "
+    # §5 Severity (full) / §3 Severity (condensed)
+    sev_no, fix_no = ("5", "7") if full else ("3", "4")
+    out += [(f"**{sev_no}. Severity Rationale.** "
              f"`{f.cvss_vector or '(no vector)'}` — computed risk **{risk}**. "
              "Score computed deterministically from the vector; tier held lower when a "
              "precondition is unproven."), ""]
@@ -93,8 +113,8 @@ def render_finding(f: Finding, patch_status: PatchStatus | None = None) -> str:
     if full:
         out += [("**6. Confirmed Attack Scenario** (theoretical — not dynamically "
                  "confirmed): follow the §2 data flow from source to sink."), ""]
-    # §7 Fix
-    out += ["**7. Fix.**", patch, ""]
+    # §7 Fix (full) / §4 Fix (condensed)
+    out += [f"**{fix_no}. Fix.**", patch, ""]
     # §8 Testing (full tier only)
     if full:
         out += [("**8. Testing.** Negative: the §2 exploit path must return the expected "

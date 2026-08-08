@@ -148,10 +148,10 @@ def test_render_finding_full_for_high():
 def test_render_finding_condensed_for_medium():
     from sec_harness.report import render_finding
     md = render_finding(_tf("XSS-2", "medium"))
-    for sec in ("1. Summary", "2. Mechanism", "5. Severity", "7. Fix"):
+    for sec in ("1. Summary", "2. Mechanism", "3. Severity", "4. Fix"):
         assert sec in md
-    for sec in ("3. Confirmation", "4. Impact", "6. Confirmed Attack", "8. Testing"):
-        assert sec not in md              # condensed omits these
+    for sec in ("5. Severity", "7. Fix", "3. Confirmation", "4. Impact", "6. Confirmed Attack", "8. Testing"):
+        assert sec not in md              # condensed omits these (1-4 now; no 5,7)
 
 
 def test_render_finding_flags_missing_receipt():
@@ -279,3 +279,38 @@ def test_write_report_renders_token_spend(tmp_path):
     write_report(ws)
     assert "Token spend by phase" in ws.report_path.read_text()
     assert "1234" in ws.report_path.read_text()
+
+
+def _dep():
+    return Finding(id="DEP-1", rule_id="osv:GHSA-x", cls="deps",
+                   status=FindingStatus.CONFIRMED, severity=Severity.LOW,
+                   file="package-lock.json", line=1,
+                   message="decompress@4.2.1: GHSA-x — archive path traversal",
+                   evidence="decompress@4.2.1", evidence_sources=["sca:osv:GHSA-x"],
+                   reachability={"reachable": False, "blocker": "dev-build-only"})
+
+
+def _code_low():
+    return Finding(id="CODE-1", rule_id="r", cls="authz",
+                   status=FindingStatus.CONFIRMED, severity=Severity.LOW,
+                   file="a.js", line=9, message="thing",
+                   dataflow=["src -> sink"])
+
+
+def test_dep_view_has_no_hollow_slots():
+    from sec_harness.report import render_finding
+    out = render_finding(_dep())
+    assert "(no dataflow recorded)" not in out
+    assert "(no vector)" not in out
+    assert "(no patch generated" not in out
+    assert "decompress@4.2.1" in out
+    assert "reachable" in out.lower() and "dev-build-only" in out
+    assert "GHSA-x" in out
+
+
+def test_condensed_tier_renumbers_without_gaps():
+    from sec_harness.report import render_finding
+    out = render_finding(_code_low())
+    assert "**1. Summary" in out and "**2. Mechanism" in out
+    assert "**3. Severity" in out and "**4. Fix" in out
+    assert "**5. " not in out and "**7. " not in out
