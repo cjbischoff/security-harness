@@ -154,7 +154,7 @@ interrupted run can resume, and multi-pass campaigns know what's already done.
 ### Reporting
 | Module | Purpose |
 |--------|---------|
-| `report.py` | Assemble the final `report.sarif` + `report.md` (renders `references/finding-template.md`, coverage ledger, cost table). CLI-callable. |
+| `report.py` | Assemble the final `report.sarif` + `report.md`. Structure: bottom-line count block (confirmed crit/high/med/low + NDT count, never merged) → risk-ordered `## Triage` table (`_triage_row`: id/risk/what/location/status/action; the `what` clip splits on period-space so semver like `decompress@4.2.1` survives) → `## Needs runtime proof — the real leads` (NDT via `render_ndt`, foregrounded above confirmed) → `## Confirmed (source-provable)` (via `render_finding`; deps get dep-view, condensed medium/low numbered 1–4 with no gaps) → coverage/redteam-link/ledger/token-spend tail. NDT is never counted as confirmed. `_risk_sort_key` (risk desc → severity → id) orders triage, confirmed, NDT, and `select_reportable` identically. CLI-callable. |
 | `sarif.py` | Emit valid SARIF 2.1.0; map severity → SARIF level. |
 
 ### Campaign, state & per-repo memory
@@ -180,6 +180,13 @@ interrupted run can resume, and multi-pass campaigns know what's already done.
 | `coverage_guide.py` | Auto-stop condition for multi-pass campaigns (coverage-complete AND yield-below-threshold). |
 | `discovery_ledger.py` | Loop-until-dry saturation state: stop after K consecutive waves add no new fingerprints. |
 
+---
+
+## Test coverage & contracts
+
+The `tests/` folder houses ~75 files, ~470 tests. Key structural guards:
+- `test_docs_invariants.py` enforces documentation contracts: prompt-constants block presence, `finding-template.md` sections (triage line, NDT-view, dep-view, reachability, renumber), and agent prompt rules (determinism, tool receipt trust, evidence chains). Regression-tested so template drift is caught early.
+
 ### Hunting aids & tuning
 | Module | Purpose |
 |--------|---------|
@@ -197,7 +204,7 @@ interrupted run can resume, and multi-pass campaigns know what's already done.
 | `preflight.py` | Verify SAST binaries + vendored rules + CodeQL packs; print exact setup commands for what's missing (never installs). CLI-callable. |
 | `redactor.py` | Three-step secret redaction before any prompt send: mask → hard-verify no residual HIGH-confidence secret → **abort** if any remain. CLI-callable. |
 | `envelope.py` | Nonce-delimited wrapper for untrusted repo text inlined into prompts (injection-resistant). *(`import secrets` here is the stdlib module, unrelated to `secrets.py`.)* |
-| `redteam.py` | Render `redteam-plan.md` from findings marked `needs-runtime`, filtered by risk bar. CLI-callable. |
+| `redteam.py` | Render `redteam-plan.md` from findings marked `needs-runtime`, filtered by risk bar; includes markdown renderers `_bullets()` and `_signal()` for runtime directives (both accept list/dict *or* plain-string `runtime_test` values). CLI-callable. |
 | `parse.py` | Fail-open JSON extraction from LLM prose/fences (largest balanced substring); returns None, never a silent empty. |
 | `gates.py` | Fail-closed gate orchestrator: a `GATE_ROUTING` table + `REQUIRED_GATES`; a missing gate result hard-fails. |
 | `cost.py` | Per-phase token accounting into `CampaignState.budget`; USD is an opt-in estimate, never rendered as measured. |

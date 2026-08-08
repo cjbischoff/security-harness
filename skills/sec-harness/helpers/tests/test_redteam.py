@@ -197,3 +197,38 @@ def test_needs_runtime_sorts_critical_before_low_when_risk_score_is_none():
     crit = _rt("A-5", Severity.CRITICAL, None, evidence_sources=["ast-grep:sink"])
     disc = discriminate([medium, crit], min_risk=7)
     assert [f.id for f in disc["needs_runtime"]] == ["A-5", "A-4"]
+
+
+def test_directive_renders_markdown_not_repr():
+    from sec_harness.redteam import _directive_block
+
+    f = _f("investigation:authz", status=FindingStatus.NEEDS_DEPLOYMENT_TESTING,
+           runtime_test={
+               "objective": "verify CE-ID isolation",
+               "preconditions": ["Two distinct TaaS CEs (CE-A, CE-B)", "low-priv user in CE-A"],
+               "expected_signal": {"secure": "403 forbidden", "insecure": "201 + record"},
+               "telemetry": ["service access logs", "audit log"],
+           })
+    out = _directive_block(f)
+    assert "['" not in out and "{'" not in out          # no python repr
+    assert "\n  - Two distinct TaaS CEs (CE-A, CE-B)" in out   # precondition bullet
+    assert "**secure:**" in out and "403 forbidden" in out     # labeled signal
+    assert "**insecure:**" in out and "201 + record" in out
+    assert "\n  - service access logs" in out                  # telemetry bullet
+
+
+def test_directive_renders_string_typed_fields_verbatim():
+    # runtime_test fields aren't schema-forced to lists/dicts; a plain string must render,
+    # not collapse to "_not specified_" (regression guard for the str branch).
+    from sec_harness.redteam import _directive_block
+
+    f = _f("investigation:authz", status=FindingStatus.NEEDS_DEPLOYMENT_TESTING,
+           runtime_test={
+               "objective": "verify CE-ID isolation",
+               "preconditions": "valid low-priv token",
+               "expected_signal": "200 instead of 403",
+           })
+    out = _directive_block(f)
+    assert "valid low-priv token" in out          # string precondition, verbatim
+    assert "200 instead of 403" in out            # string expected_signal, verbatim
+    assert "_not specified_" not in out.split("**Telemetry")[0]  # str fields not collapsed

@@ -45,3 +45,13 @@ def test_correlate_combiner_prompt_exists_and_carries_rules():
     assert "$shell_var" in txt or "shell_var" in txt                     # no literal secrets
     for slot in ("architecture", "threat_model", "redteam", "findings"):
         assert slot in txt.replace("-", "_")         # names the four docs
+
+
+def test_finding_template_documents_triage_ndt_dep_views():
+    p = Path(__file__).resolve().parents[2] / "references" / "finding-template.md"
+    txt = p.read_text().lower()
+    assert "triage line" in txt                       # skim layer documented
+    assert "ndt-view" in txt or "needs-runtime view" in txt
+    assert "dep-view" in txt or "dependency view" in txt
+    assert "reachability" in txt                       # dep-view binding
+    assert "renumber" in txt                           # condensed tier no-gap note
