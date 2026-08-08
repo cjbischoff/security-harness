@@ -119,6 +119,75 @@ usage with `cost.record_agent(state, <phase>, <model>, <tokens>)` and `save_stat
 report renders measured per-phase token totals ("Token spend by phase"). USD is an opt-in
 estimate (`cost.estimate_cost_usd`), never shown as a measured figure.
 
+## Process methodology (knobs + playbook)
+
+Four `scan_options` knobs let the orchestrator tune cost, coverage, and fan-out without
+weakening the FP ladder. Two of them carry hard invariants that are not knobs.
+
+### `scan_options.adversary_depth`
+
+Controls how eagerly the harness spawns the opus phase-adversary for each analysis phase
+(recon / architecture / threat-model / C1 context).
+
+- **`full`** (default): every analysis phase runs its opus `phase-adversary` after the
+  deterministic `phase_gate`. This is the safe, highest-confidence mode and the right
+  choice for audits where you cannot pre-validate that prior adversarial output covers
+  the same scope.
+- **`gate-by-exception`**: the deterministic `phase_gate` always runs. The opus
+  phase-adversary is spawned only when a phase adds material NEW claims beyond context
+  that has already been adversarially validated — for example, when the context-adversary's
+  enumeration of components and trust boundaries already covers the architecture phase's
+  scope, spawning a second full opus adversary is redundant.
+
+**HARD rule:** `gate-by-exception` filters what enters the FP ladder — it controls which
+phase-adversary invocations fire — but it **never** lets a finding reach `confirmed` without
+a mechanical tool receipt. The finding-side FP ladder (critic → judge → adversarial-validate)
+always runs at full strength regardless of `adversary_depth`.
+
+Authoring KB artifacts (e.g. `architecture.md`, `THREAT_MODEL.md`) directly from a verified
+adversary-context output is permitted **only under `gate-by-exception`** — when the opus
+context-adversary has already enumerated components and trust-boundaries with cited `file:line`
+evidence, the orchestrator may author those artifacts from that verified output instead of
+spawning fresh agents. Every finding produced from that KB still passes the full FP ladder.
+
+### `scan_options.model_tier_map`
+
+Phase-to-tier overrides. The default table is:
+
+| Phase(s) | Tier |
+|---|---|
+| recon, architecture, threat-model, context-ingest, investigate, critic, redteam | sonnet |
+| adversarial-validate, patch, phase-adversary, redteam-adversary, context-adversary | opus |
+| pure-transcription implementer work | haiku (cheap tier) |
+
+**HARD invariant — model-family diversity:** the adversarial validator must be a different
+and stronger model family than the sonnet producer. This is an invariant, not a knob: a
+single-model-family environment must degrade to a fresh-context validator (a new context
+window with no memory of the finding-production run) and LOG it explicitly. Never let the
+finder be the sole confirmer.
+
+If `model_tier_map` overrides a tier in a way that would place finder and validator in the
+same family, the harness must detect it, fall back to the fresh-context validator, and record
+the degradation in `state.json`.
+
+### `scan_options.wave_k` / `max_waves`
+
+Override the discovery-ledger saturation parameters passed to `new_ledger(...)` in the
+investigate phase. Defaults: `K=2` (consecutive waves with no new fingerprints → saturated),
+`max_waves=5` (hard cap). Increase `wave_k` to require more consecutive flat waves before
+declaring saturation (raises recall at the cost of more investigate round-trips); decrease
+`max_waves` to enforce a tighter token ceiling on discovery. The adversarial coverage gate
+still runs after the loop; these knobs tune the saturation floor, not the gate itself.
+
+### `scan_options.token_budget`
+
+Soft per-scan output-token target. The orchestrator uses this as a scaling signal: a tighter
+budget narrows the investigate fan-out (fewer parallel wave agents per round-trip) and may
+skip optional tuning rounds; a looser budget widens fan-out and enables the adaptive
+tool-tuning loop (Phase 0.5). The budget is a steering heuristic, not a hard abort — a
+finding already in flight is never dropped mid-run to hit the target. Record measured token
+spend per phase with `cost.record_agent` so the next run can calibrate.
+
 ## Phase 0–1: Knowledge Base build + threat model (agentic)
 
 Run BEFORE the deterministic scan so the profile can guide later phases. The main
