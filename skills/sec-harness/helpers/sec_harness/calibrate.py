@@ -16,6 +16,7 @@ _HIGH_IMPACT = {"sqli", "cmdi", "deserialization", "ssti", "authz", "ssrf", "pat
 # mainstream app does the same, unexploited in years of prod) is capped low — a
 # textbook deviation that a real baseline accepts is not a high-risk finding.
 _BASELINE_CAP = 4
+_SCOREABLE = {FindingStatus.CONFIRMED, FindingStatus.NEEDS_DEPLOYMENT_TESTING}
 # A precondition lowers risk only when it is a real barrier an attacker must overcome.
 # Free conditions (unauthenticated/remote/default) are NOT mitigants and never lower risk
 # (fixes O-031: enumerating free preconditions must not penalize a finding).
@@ -143,7 +144,7 @@ def calibrate_findings(ws: Workspace) -> int:
     findings = read_findings(ws)
     scored = 0
     for f in findings:
-        if f.status is FindingStatus.CONFIRMED:
+        if f.status in _SCOREABLE:
             try:
                 _attach_citations(f)  # F1: auto-attach ASVS/CodeGuard (no-op if already set)
                 derived = _derived_score(f)  # pre-floor: floor must not mask inflation
