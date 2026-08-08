@@ -154,7 +154,7 @@ interrupted run can resume, and multi-pass campaigns know what's already done.
 ### Reporting
 | Module | Purpose |
 |--------|---------|
-| `report.py` | Assemble the final `report.sarif` + `report.md` (renders `references/finding-template.md`, coverage ledger, cost table). `deps` findings get a purpose-built dep-view (package@version, advisory, reachability, bump-fix — no hollow dataflow/vector/patch slots); condensed medium/low tier is numbered 1–4 with no gaps. `render_ndt()` renders needs-deployment-testing findings (foregrounded, always-labeled needs-runtime, never confirmed). CLI-callable. |
+| `report.py` | Assemble the final `report.sarif` + `report.md` (renders `references/finding-template.md`, coverage ledger, cost table). `deps` findings get a purpose-built dep-view (package@version, advisory, reachability, bump-fix — no hollow dataflow/vector/patch slots); condensed medium/low tier is numbered 1–4 with no gaps. `render_ndt()` renders needs-deployment-testing findings (foregrounded, always-labeled needs-runtime, never confirmed, always points to `redteam-plan.md`). CLI-callable. |
 | `sarif.py` | Emit valid SARIF 2.1.0; map severity → SARIF level. |
 
 ### Campaign, state & per-repo memory

@@ -341,9 +341,22 @@ def _ndt():
 def test_render_ndt_labels_needs_runtime_and_shows_test():
     from sec_harness.report import render_ndt
     out = render_ndt(_ndt())
-    assert "needs runtime" in out.lower()                 # always labeled
-    assert "confirmed" not in out.lower()                 # never laundered
+    header = out.splitlines()[0]
+    assert "needs runtime" in header.lower()              # view labels it needs-runtime
+    assert "confirmed" not in header.lower()              # view's own heading never says confirmed
     assert "spec.js:133" in out
     assert "verify CE-ID isolation" in out                # the test objective
     assert "403" in out and "201 + CE-B record" in out    # secure/insecure signal
     assert "redteam-plan.md" in out                       # pointer to the runnable test
+
+
+def test_render_ndt_degrades_without_runtime_test():
+    import dataclasses
+
+    from sec_harness.report import render_ndt
+    f = dataclasses.replace(_ndt(), runtime_test=None, dataflow=[], preconditions=[])
+    out = render_ndt(f)
+    assert "needs runtime" in out.lower()
+    assert "no source chain recorded" in out
+    assert "none recorded" in out
+    assert "redteam-plan.md" in out                       # pointer present unconditionally

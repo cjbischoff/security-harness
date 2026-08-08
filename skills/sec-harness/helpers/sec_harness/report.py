@@ -154,7 +154,7 @@ def render_ndt(f: Finding) -> str:
         if sig:
             out += [f"  - **secure:** {sig.get('secure', '_unspecified_')}",
                     f"  - **insecure:** {sig.get('insecure', '_unspecified_')}"]
-        out += ["_Runnable payloads + telemetry: see `redteam-plan.md`._", ""]
+    out += ["_Runnable payloads + telemetry: see `redteam-plan.md`._", ""]
     return "\n".join(out)
 
 
