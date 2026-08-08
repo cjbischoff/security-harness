@@ -77,25 +77,32 @@ def attack_chain_graph(verdicts: list[CorrelationVerdict], edges: list[Edge]) ->
     """Emit a mermaid graph of cross-repo attack chains (source finding → resolving enforcer).
 
     One chain per verdict whose ``direction`` landed an edge (promote/weaken/demote); the sink is
-    the resolving edge's ``detail["to"]`` (else the first evidence-chain entry, else the edge
-    key). Nodes are classed by ``correlated_status``. ``coverage-gap`` verdicts draw no chain.
-    Output is deterministic (verdicts sorted by finding_ref).
+    the resolving edge's ``detail["to"]`` — matched on the edge whose ``detail["from"]`` is the
+    verdict's ``finding_ref`` (a unique anchor, so the sink is collision-free) — else the first
+    evidence-chain entry, else the edge key. Each source node is classed by its
+    ``correlated_status``. ``coverage-gap`` verdicts draw no chain. Output is deterministic
+    (verdicts sorted by finding_ref; the edge index resolves ties by a sorted from/to key).
 
     Args:
         verdicts: All correlation verdicts.
-        edges: All edges (used to resolve the sink for a verdict's edge key).
+        edges: All edges (used to resolve the sink for a verdict's source finding).
 
     Returns:
         A mermaid ``flowchart LR`` document as a string.
     """
-    to_by_key = {e.key: e.detail.get("to", "") for e in edges if e.type == "control-enforces"}
+    # index control-enforces sinks by their source anchor (detail["from"]), which equals the
+    # re-thresholded finding's finding_ref; sorted + setdefault keeps it order-independent.
+    to_by_from: dict[str, str] = {}
+    for e in sorted(edges, key=lambda x: (x.detail.get("from", ""), x.detail.get("to", ""))):
+        if e.type == "control-enforces":
+            to_by_from.setdefault(e.detail.get("from", ""), e.detail.get("to", ""))
     lines = ["flowchart LR"]
     chains: list[str] = []
     node_class: dict[str, str] = {}
     for v in sorted(verdicts, key=lambda x: x.finding_ref):
         if v.direction not in ("promote", "weaken", "demote"):
             continue
-        sink = to_by_key.get(v.edge or "") or (
+        sink = to_by_from.get(v.finding_ref) or (
             v.evidence_chain[0] if v.evidence_chain else (v.edge or "sink"))
         src_id, sink_id = _node_id(v.finding_ref), _node_id(sink)
         chains.append(f"  {src_id} --> {sink_id}")
