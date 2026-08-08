@@ -93,6 +93,37 @@ def discriminate(findings: list[Finding], min_risk: int = DEFAULT_MIN_RISK) -> d
     }
 
 
+def _bullets(items: object) -> str:
+    """Render a list of strings as indented markdown bullets.
+
+    Args:
+        items: A list of strings, or any other value.
+
+    Returns:
+        Newline-joined ``  - <item>`` bullets, or ``_not specified_`` when
+        not a non-empty list.
+    """
+    if isinstance(items, list) and items:
+        return "\n".join(f"  - {x!s}" for x in items)
+    return "_not specified_"
+
+
+def _signal(d: object) -> str:
+    """Render an expected-signal dict as labeled secure/insecure sub-fields.
+
+    Args:
+        d: A dict with ``secure``/``insecure`` keys, or any other value.
+
+    Returns:
+        Two indented ``**secure:** …`` / ``**insecure:** …`` lines, or
+        ``_not specified_``.
+    """
+    if isinstance(d, dict) and d:
+        return (f"\n  - **secure:** {d.get('secure', '_unspecified_')}"
+                f"\n  - **insecure:** {d.get('insecure', '_unspecified_')}")
+    return "_not specified_"
+
+
 def _directive_block(f: Finding, patch_status: PatchStatus | None = None) -> str:
     """Render one manual runtime-test directive from a finding's ``runtime_test`` block.
 
@@ -117,11 +148,11 @@ def _directive_block(f: Finding, patch_status: PatchStatus | None = None) -> str
             lines += [caution, ""]
     lines += [
         f"- **Objective:** {rt.get('objective', f.message)}",
-        f"- **Preconditions / access:** {rt.get('preconditions', '_not specified_')}",
+        f"- **Preconditions / access:**\n{_bullets(rt.get('preconditions'))}",
         "- **Payload(s)** (shell vars only — export before use):",
         payload_md,
-        f"- **Expected signal:** {rt.get('expected_signal', '_not specified_')}",
-        f"- **Telemetry to watch:** {rt.get('telemetry', '_not specified_')}",
+        f"- **Expected signal:**{_signal(rt.get('expected_signal'))}",
+        f"- **Telemetry to watch:**\n{_bullets(rt.get('telemetry'))}",
         f"- **Static evidence:** `{f.file}:{f.line}` — "
         + (", ".join(f"`{r}`" for r in receipts) or "_no tool receipt (verify carefully)_"),
         "",

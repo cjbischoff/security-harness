@@ -197,3 +197,22 @@ def test_needs_runtime_sorts_critical_before_low_when_risk_score_is_none():
     crit = _rt("A-5", Severity.CRITICAL, None, evidence_sources=["ast-grep:sink"])
     disc = discriminate([medium, crit], min_risk=7)
     assert [f.id for f in disc["needs_runtime"]] == ["A-5", "A-4"]
+
+
+def test_directive_renders_markdown_not_repr():
+    from sec_harness.redteam import _directive_block
+
+    f = _f("investigation:authz", status=FindingStatus.NEEDS_DEPLOYMENT_TESTING,
+           runtime_test={
+               "objective": "verify CE-ID isolation",
+               "preconditions": ["Two distinct TaaS CEs (CE-A, CE-B)", "low-priv user in CE-A"],
+               "expected_signal": {"secure": "403 forbidden", "insecure": "201 + record"},
+               "telemetry": ["service access logs", "audit log"],
+           })
+    f.cls = "authz"
+    out = _directive_block(f)
+    assert "['" not in out and "{'" not in out          # no python repr
+    assert "\n  - Two distinct TaaS CEs (CE-A, CE-B)" in out   # precondition bullet
+    assert "**secure:**" in out and "403 forbidden" in out     # labeled signal
+    assert "**insecure:**" in out and "201 + record" in out
+    assert "\n  - service access logs" in out                  # telemetry bullet
