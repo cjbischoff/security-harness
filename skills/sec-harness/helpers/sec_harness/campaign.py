@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from collections import Counter
+from pathlib import Path
 
 from sec_harness.models import CampaignState, FindingStatus
 from sec_harness.state import load_state, save_state
@@ -111,6 +112,54 @@ def promote_runtime_dependent(ws: Workspace) -> int:
             f.history.append({"event": "campaign:promoted-runtime-dependent"})
             n += 1
     if n:
+        write_findings(ws, findings)
+    return n
+
+
+_LOCKFILES = {
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "Gemfile.lock",
+    "go.sum", "go.mod", "poetry.lock", "Pipfile.lock", "requirements.txt",
+    "Cargo.lock", "composer.lock",
+}
+
+
+def promote_deps(ws: Workspace) -> int:
+    """Promote SCA ``deps`` candidates to confirmed with a reachability note.
+
+    A ``deps`` finding carrying a mechanical SCA receipt (an ``evidence_sources`` entry
+    beginning ``sca``) provably identifies a vulnerable dependency, so it is confirmed
+    deterministically (no investigate agent routes ``deps``). A lockfile-only hit is marked
+    ``reachable=False`` (present in the dependency graph but not shown reachable from runtime
+    code — a dev/build/transitive dependency until proven otherwise); any other path is marked
+    ``reachable=None`` (present, runtime reachability unverified). LLM-only ``deps`` candidates
+    are left untouched — the SCA receipt is the ground.
+
+    Args:
+        ws: Workspace whose ``deps`` candidates are promoted in place.
+
+    Returns:
+        The number of findings promoted.
+    """
+    from sec_harness.evidence import is_tool_receipt  # local: keep import graph flat
+    findings = read_findings(ws)
+    n = 0
+    dirty = False
+    for f in findings:
+        if f.status is not FindingStatus.CANDIDATE or f.cls != "deps":
+            continue
+        if not any(s.startswith("sca") and is_tool_receipt(s) for s in f.evidence_sources):
+            continue
+        f.status = FindingStatus.CONFIRMED
+        lockfile_only = Path(f.file).name in _LOCKFILES
+        f.reachability = {
+            "reachable": False if lockfile_only else None,
+            "blocker": "dev-build-dependency-not-runtime-verified" if lockfile_only else None,
+            "chain": [],
+        }
+        f.history.append({"event": "campaign:promoted-deps", "lockfile_only": lockfile_only})
+        n += 1
+        dirty = True
+    if dirty:
         write_findings(ws, findings)
     return n
 
