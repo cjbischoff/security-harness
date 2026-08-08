@@ -100,11 +100,13 @@ def _bullets(items: object) -> str:
         items: A list of strings, or any other value.
 
     Returns:
-        Newline-joined ``  - <item>`` bullets, or ``_not specified_`` when
-        not a non-empty list.
+        Newline-joined ``  - <item>`` bullets for a list, a single ``  - <s>``
+        bullet for a non-empty string, or ``_not specified_`` otherwise.
     """
     if isinstance(items, list) and items:
         return "\n".join(f"  - {x!s}" for x in items)
+    if isinstance(items, str) and items.strip():
+        return f"  - {items}"
     return "_not specified_"
 
 
@@ -115,13 +117,15 @@ def _signal(d: object) -> str:
         d: A dict with ``secure``/``insecure`` keys, or any other value.
 
     Returns:
-        Two indented ``**secure:** …`` / ``**insecure:** …`` lines, or
-        ``_not specified_``.
+        Two indented ``**secure:** …`` / ``**insecure:** …`` lines for a dict,
+        an inline `` <s>`` for a non-empty string, or `` _not specified_``.
     """
     if isinstance(d, dict) and d:
         return (f"\n  - **secure:** {d.get('secure', '_unspecified_')}"
                 f"\n  - **insecure:** {d.get('insecure', '_unspecified_')}")
-    return "_not specified_"
+    if isinstance(d, str) and d.strip():
+        return f" {d}"
+    return " _not specified_"
 
 
 def _directive_block(f: Finding, patch_status: PatchStatus | None = None) -> str:
