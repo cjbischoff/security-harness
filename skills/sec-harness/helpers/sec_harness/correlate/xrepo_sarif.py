@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
-
 from sec_harness.correlate.ingest import IngestedFinding
 from sec_harness.correlate.rethreshold import CorrelationVerdict
-from sec_harness.models import FindingStatus
-from sec_harness.sarif import to_sarif
+from sec_harness.models import Finding, FindingStatus
+from sec_harness.sarif import _SCHEMA, to_sarif
 
 _REPORTABLE = {FindingStatus.CONFIRMED, FindingStatus.FIXED}
 _PROMOTE_LEVEL = {"promote": "error"}
@@ -31,7 +29,7 @@ def to_correlation_sarif(
     Returns:
         A SARIF 2.1.0 document with one run per member plus a correlation run.
     """
-    by_member: dict[str, list] = defaultdict(list)
+    by_member: dict[str, list[Finding]] = {}
     for i in ings:
         by_member.setdefault(i.member_key, [])
         if i.finding.status in _REPORTABLE:
@@ -50,7 +48,6 @@ def to_correlation_sarif(
                     "text": f"{v.finding_ref}: {v.base_status} -> "
                     f"{v.correlated_status} ({'; '.join(v.evidence_chain)})"
                 },
-                "locations": [],
             }
         )
     runs.append(
@@ -59,9 +56,4 @@ def to_correlation_sarif(
             "results": results,
         }
     )
-    return {
-        "version": "2.1.0",
-        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/"
-        "Schemata/sarif-schema-2.1.0.json",
-        "runs": runs,
-    }
+    return {"version": "2.1.0", "$schema": _SCHEMA, "runs": runs}

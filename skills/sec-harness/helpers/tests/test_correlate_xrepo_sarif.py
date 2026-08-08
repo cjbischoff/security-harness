@@ -8,7 +8,7 @@ from sec_harness.correlate.xrepo_sarif import to_correlation_sarif
 from sec_harness.models import Finding, FindingStatus, Severity
 
 
-def _f(status: str) -> Finding:
+def _f(status: FindingStatus) -> Finding:
     """Create a test Finding with a given status.
 
     Args:
@@ -61,4 +61,34 @@ def test_sarif_one_run_per_member_plus_correlation_run() -> None:
     assert doc["runs"][1]["results"] == []  # NDT is not reportable
     corr = doc["runs"][-1]["results"]
     assert corr[0]["level"] == "error" and corr[0]["ruleId"] == "correlated-promote"
+    assert "locations" not in corr[0]  # empty locations dropped for GitHub ingest
     assert doc == to_correlation_sarif(ings, [v])  # deterministic
+
+
+def test_fixed_finding_is_reportable() -> None:
+    """A FIXED finding appears in its member's run (FIXED is reportable)."""
+    ings = [
+        IngestedFinding(
+            member_key="a#.",
+            role="rbac-source",
+            cross_repo_id="a#.:h.go:9:r",
+            finding=_f(FindingStatus.FIXED),
+        ),
+    ]
+    doc = to_correlation_sarif(ings, [])
+    assert len(doc["runs"][0]["results"]) == 1
+
+
+def test_demote_verdict_is_note_level() -> None:
+    """A non-promote verdict produces a note-level correlation result."""
+    v = CorrelationVerdict(
+        finding_ref="a#.:h.go:9:r",
+        base_status="confirmed",
+        correlated_status="rejected",
+        direction="demote",
+        edge="k",
+        evidence_chain=["b#x: rcpt"],
+        confidence="high",
+    )
+    corr = to_correlation_sarif([], [v])["runs"][-1]["results"]
+    assert corr[0]["level"] == "note" and corr[0]["ruleId"] == "correlated-demote"
