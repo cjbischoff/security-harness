@@ -47,15 +47,15 @@ def test_promote_when_enforcer_has_gap_finding(tmp_path: Path):
 def test_demote_when_enforcer_ledger_no_issue(tmp_path: Path):
     ledger = ('{"completeness": "complete", "surfaces": [{"id": "authz", "disposition": '
               '"no_issue_found"}], "deferred": [], "open_questions": []}')
-    man = _members(tmp_path, [], ledger)  # enforcer investigated authz, no issue
+    # enforcer carries a token-bearing finding sharing the rbac privilege token so a
+    # control-enforces edge forms; the ledger's no_issue_found disposition drives the demote.
+    man = _members(tmp_path, [_enf("E-1", "handler for 'p write' has no MR check", status="fixed")],
+                   ledger)  # enforcer investigated authz, no issue
     ings = ingest(man); edges = control_enforces_edges(ings); cov = member_coverage(man)
-    # need a control-enforces edge even with no enforcer FINDING: add an enforcer finding that shares
-    # the token but is rejected, so the edge exists and the ledger drives the demote
-    # (edge requires a shared-token finding on both sides; see note)
-    if not edges:
-        return  # documented limitation: demote needs a token-bearing enforcer finding; see Task notes
     v = next(v for v in rethreshold(ings, edges, cov) if v.finding_ref.startswith("rbac-1#."))
-    assert v.direction in ("demote", "coverage-gap")
+    assert v.direction == "demote"
+    assert v.correlated_status == "rejected"
+    assert v.base_status == "needs-deployment-testing"
 
 
 def test_coverage_gap_when_no_edge(tmp_path: Path):
