@@ -85,6 +85,31 @@ def shared_dependency_edges(ings: list[IngestedFinding]) -> list[Edge]:
     return sorted(edges, key=lambda e: e.key)
 
 
+_RECURRENCE_STATUSES = {"confirmed", "needs-deployment-testing", "fixed"}
+
+
+def same_class_recurrence_edges(ings: list[IngestedFinding]) -> list[Edge]:
+    """Flag a shape (fingerprint, else cls:rule_id) recurring across ≥2 members as systemic.
+
+    Args:
+        ings: All ingested findings.
+
+    Returns:
+        One ``same-class-recurrence`` edge per shape present in ≥2 distinct member keys (only
+        findings whose status is confirmed/needs-deployment-testing/fixed count), sorted by key.
+    """
+    by_shape: dict[str, dict[str, str]] = defaultdict(dict)
+    for i in ings:
+        if i.finding.status.value not in _RECURRENCE_STATUSES:
+            continue
+        shape = i.finding.fingerprint or f"{i.finding.cls}:{i.finding.rule_id}"
+        by_shape[shape][i.member_key] = i.finding.cls
+    edges = [Edge(type="same-class-recurrence", members=list(mk), key=shape,
+                  detail={"cls": next(iter(mk.values())), "systemic": True})
+             for shape, mk in by_shape.items() if len(mk) >= 2]
+    return sorted(edges, key=lambda e: e.key)
+
+
 def write_edges(path: str | Path, edges: list[Edge]) -> None:
     """Write edges to a JSON file (sorted, deterministic).
 
