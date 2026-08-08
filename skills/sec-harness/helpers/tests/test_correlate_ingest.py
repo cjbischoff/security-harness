@@ -123,3 +123,31 @@ def test_ingest_tags_cross_repo_ids_readonly(tmp_path: Path) -> None:
         mb["slug"]: _snap(Path(mb["repo_root"])),
     }
     assert before == after, "ingest must not modify any member sidecar"
+
+
+def test_member_coverage_loads_readonly(tmp_path):
+    import hashlib
+    from pathlib import Path
+
+    from sec_harness.correlate.ingest import member_coverage, member_workspace
+    from sec_harness.correlate.manifest import Manifest, Member
+    from tests.correlate_fixtures import build_member
+
+    ma = build_member(tmp_path, slug="a-1", scan_scope=".", findings=[])
+    # write a coverage-ledger into the member's kb (simulating a Plan-3 scan output)
+    ws = member_workspace(Member(**ma))
+    (ws.kb / "coverage-ledger.json").write_text(
+        '{"completeness": "partial", "surfaces": [{"id": "authz", "disposition": "needs_follow_up"}],'
+        ' "deferred": [], "open_questions": []}')
+    mb = build_member(tmp_path, slug="b-1", scan_scope=".", findings=[])  # no ledger
+
+    def _snap(root):
+        return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in sorted(Path(root).rglob("*")) if p.is_file()}
+    before = _snap(ma["repo_root"])
+
+    man = Manifest(product="p", members=[Member(**ma), Member(**mb)])
+    cov = member_coverage(man)
+    assert cov["a-1#."]["completeness"] == "partial"
+    assert cov["b-1#."] == {}  # no ledger -> empty
+    assert _snap(ma["repo_root"]) == before  # read-only

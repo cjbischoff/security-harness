@@ -45,3 +45,29 @@ def test_same_class_recurrence_flags_systemic(tmp_path: Path):
     assert edges[0].detail["systemic"] is True
     assert edges[0].detail["cls"] == "authz"
     assert set(edges[0].members) == {"a-1#.", "b-1#."}
+
+
+def test_control_enforces_joins_privilege_across_roles(tmp_path):
+    from sec_harness.correlate.edges import control_enforces_edges
+    from sec_harness.correlate.ingest import ingest
+    from sec_harness.correlate.manifest import Manifest, Member
+    from tests.correlate_fixtures import build_member
+
+    # rbac-source finding names a privilege; service-enforcer finding names the same privilege
+    ma = build_member(tmp_path, slug="rbac-1", scan_scope=".", findings=[
+        {"id": "A-1", "cls": "authz", "status": "needs-deployment-testing", "severity": "medium",
+         "rule_id": "context:claimed-control", "file": "src/rbac/spec.js", "line": 1,
+         "message": "privilege 'aem analytics findings write' unscoped; enforcement out-of-repo",
+         "evidence_sources": ["ast-grep:x"]}])
+    mb = {**build_member(tmp_path, slug="svc-1", scan_scope=".", findings=[
+        {"id": "E-1", "cls": "authz", "status": "needs-deployment-testing", "severity": "medium",
+         "rule_id": "no-mr-check", "file": "api.go", "line": 9,
+         "message": "handler for 'aem analytics findings write' has no MR check",
+         "evidence_sources": ["ast-grep:y"]}]), "role": "service-enforcer"}
+    man = Manifest(product="p", members=[Member(**ma), Member(**mb)])
+    edges = control_enforces_edges(ingest(man))
+    ce = [e for e in edges if e.type == "control-enforces"]
+    assert any(e.key == "aem analytics findings write" for e in ce)
+    e = next(e for e in ce if e.key == "aem analytics findings write")
+    assert set(e.members) == {"rbac-1#.", "svc-1#."}
+    assert e.detail["from"].startswith("rbac-1#.") and e.detail["to"].startswith("svc-1#.")

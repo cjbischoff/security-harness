@@ -25,3 +25,12 @@ def test_skill_documents_methodology_playbook():
     assert "model_tier_map" in txt
     # family-diversity must remain a hard invariant, not a knob
     assert "family" in txt.lower()
+
+
+def test_cross_repo_adversary_prompt_exists_and_carries_rules():
+    p = Path(__file__).resolve().parents[2] / "agents" / "cross-repo-adversary.md"
+    txt = p.read_text().lower()
+    assert "deterministic" in txt          # promote needs a deterministic join
+    assert "tool receipt" in txt or "mechanical" in txt
+    assert "weaken" in txt or "demote" in txt  # reasoning-only can only weaken/demote
+    assert "promote" in txt

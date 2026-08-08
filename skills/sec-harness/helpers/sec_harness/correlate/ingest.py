@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -61,4 +62,21 @@ def ingest(manifest: Manifest) -> list[IngestedFinding]:
                 IngestedFinding(member_key=member.member_key, role=member.role,
                                 cross_repo_id=cid, finding=f)
             )
+    return out
+
+
+def member_coverage(manifest: Manifest) -> dict[str, dict]:
+    """Load each member's coverage-ledger (read-only), keyed by member_key.
+
+    Args:
+        manifest: The product manifest.
+
+    Returns:
+        ``{member_key: <coverage-ledger dict>}``; a member with no ``kb/coverage-ledger.json``
+        maps to ``{}``. Opens no member file for write.
+    """
+    out: dict[str, dict] = {}
+    for member in manifest.members:
+        p = member_workspace(member).kb / "coverage-ledger.json"
+        out[member.member_key] = json.loads(p.read_text()) if p.is_file() else {}
     return out

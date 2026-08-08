@@ -7,12 +7,14 @@ import json
 from pathlib import Path
 
 from sec_harness.correlate.edges import (
+    control_enforces_edges,
     same_class_recurrence_edges,
     shared_dependency_edges,
     write_edges,
 )
-from sec_harness.correlate.ingest import ingest
+from sec_harness.correlate.ingest import ingest, member_coverage
 from sec_harness.correlate.manifest import load_manifest
+from sec_harness.correlate.rethreshold import rethreshold, write_verdicts
 from sec_harness.correlate.workspace import CorrelationWorkspace
 
 
@@ -35,9 +37,12 @@ def main(argv: list[str] | None = None) -> int:
     cw.ensure()
     cw.manifest_path.write_text(Path(args.manifest).read_text())  # copy manifest into the workspace
     ings = ingest(manifest)
-    edges = shared_dependency_edges(ings) + same_class_recurrence_edges(ings)
+    edges = shared_dependency_edges(ings) + same_class_recurrence_edges(ings) + control_enforces_edges(ings)
     write_edges(cw.edges_path, edges)
-    print(json.dumps({"edges": len(edges), "members": len(manifest.members)}))
+    coverage = member_coverage(manifest)
+    verdicts = rethreshold(ings, edges, coverage)
+    write_verdicts(cw.verdicts_path, verdicts)
+    print(json.dumps({"edges": len(edges), "members": len(manifest.members), "verdicts": len(verdicts)}))
     return 0
 
 
