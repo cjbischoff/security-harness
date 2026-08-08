@@ -227,6 +227,9 @@ def write_report(ws: Workspace, *, target: str | None = None) -> dict:
     coverage_path = ws.kb / "coverage.json"
     coverage = json.loads(coverage_path.read_text()) if coverage_path.exists() else None
     cl_path = ws.kb / "coverage-ledger.json"
+    if not cl_path.exists():
+        from sec_harness.coverage_ledger import build_coverage_ledger  # local: avoid cycle
+        build_coverage_ledger(ws)
     coverage_ledger = json.loads(cl_path.read_text()) if cl_path.exists() else None
     has_redteam_plan = (ws.reports / "redteam-plan.md").exists()
     token_spend = cost.aggregate_by_phase(load_state(ws)) or None
@@ -242,7 +245,8 @@ def write_report(ws: Workspace, *, target: str | None = None) -> dict:
                                           coverage_ledger=coverage_ledger,
                                           has_redteam_plan=has_redteam_plan,
                                           patch_statuses=patch_statuses))
-    ws.findings_json_path.write_text(json.dumps([f.to_dict() for f in reportable], indent=2))
+    findings_out = reportable + ndt
+    ws.findings_json_path.write_text(json.dumps([f.to_dict() for f in findings_out], indent=2))
     record_stage(ws, "report")
     return {"reported": len(reportable), "sarif": str(ws.sarif_path), "report": str(ws.report_path)}
 
