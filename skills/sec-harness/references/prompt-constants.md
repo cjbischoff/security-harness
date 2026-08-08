@@ -32,6 +32,8 @@ score deterministically (never assert a numeric score yourself).
 Legal CVSS 3.1 base-metric values (use ONLY these): AV:[N,A,L,P] AC:[L,H] PR:[N,L,H] UI:[N,R]
 S:[U,C] C:[N,L,H] I:[N,L,H] A:[N,L,H]. Never emit a value outside these sets (e.g. `C:M` is invalid).
 
+SEVERITY VALUES: `severity` is exactly one of `info | low | medium | high | critical`. NEVER put a status value (`informational`, `needs-deployment-testing`, `candidate`) in `severity` — those are `status` values. A finding whose `severity` is not one of the five bands is rejected by the gate.
+
 ## SEVERITY_PRECONDITION
 Write the finding's `preconditions` list (a JSON array of strings) BEFORE choosing a
 severity — enumerate everything that must hold for exploitation (auth state, specific

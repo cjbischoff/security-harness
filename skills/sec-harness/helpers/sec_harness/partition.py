@@ -104,12 +104,18 @@ def reconcile_plan(ws: Workspace, agents_to_spawn: list[str]) -> list[str]:
         settled (confirmed/rejected/stale on a later pass) is not re-routed.
     """
     parts = partition_candidates_by_class(ws)
+    seen: set[str] = set()
+    base: list[str] = []
+    for cls in agents_to_spawn:
+        if cls not in seen:
+            seen.add(cls)
+            base.append(cls)
     extra = sorted(
         cls for cls, fs in parts.items()
-        if cls not in agents_to_spawn and cls != "deps" and not is_noise_class(cls)
+        if cls not in seen and cls != "deps" and not is_noise_class(cls)
         and any(f.status is FindingStatus.CANDIDATE for f in fs)
     )
-    return list(agents_to_spawn) + extra
+    return base + extra
 
 
 def must_investigate(profile) -> bool:

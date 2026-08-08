@@ -1,9 +1,13 @@
 """Tests for campaign pass lifecycle."""
 
-from sec_harness.campaign import pass_report, record_stage
+from __future__ import annotations
+
+from pathlib import Path
+
+from sec_harness.campaign import pass_report, promote_deps, record_stage
 from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.state import begin_pass, load_state
-from sec_harness.workspace import Workspace, write_findings
+from sec_harness.workspace import Workspace, read_findings, write_findings
 
 
 def _f(id_, status):
@@ -62,6 +66,51 @@ def test_carry_forward_ignores_non_settled(tmp_path):
                 severity=Severity.HIGH, file="app.py", line=1, message="m"),
     ])
     assert carry_forward(ws, ["app.py"]) == {"staled": 0, "kept": 0}  # RAW not settled
+
+
+def _dep(
+    id: str = "C-1",
+    file: str = "package-lock.json",
+    evidence_sources: list[str] | None = None,
+) -> Finding:
+    return Finding(
+        id=id,
+        rule_id="osv:GHSA-x",
+        cls="deps",
+        status=FindingStatus.CANDIDATE,
+        severity=Severity.HIGH,
+        file=file,
+        line=1,
+        message="vuln dep",
+        evidence_sources=evidence_sources if evidence_sources is not None else ["sca:osv:GHSA-x"],
+    )
+
+
+def test_promote_deps_confirms_with_sca_receipt(tmp_path: Path):
+    ws = Workspace(tmp_path); ws.ensure()
+    write_findings(ws, [_dep()])
+    n = promote_deps(ws)
+    f = read_findings(ws)[0]
+    assert n == 1
+    assert f.status is FindingStatus.CONFIRMED
+    assert f.reachability == {"reachable": False,
+                              "blocker": "dev-build-dependency-not-runtime-verified", "chain": []}
+
+
+def test_promote_deps_ignores_non_sca_candidate(tmp_path: Path):
+    ws = Workspace(tmp_path); ws.ensure()
+    write_findings(ws, [_dep(id="C-2", evidence_sources=["llm-claimed:dep"])])
+    assert promote_deps(ws) == 0
+    assert read_findings(ws)[0].status is FindingStatus.CANDIDATE
+
+
+def test_promote_deps_non_lockfile_marks_unverified(tmp_path: Path):
+    ws = Workspace(tmp_path); ws.ensure()
+    write_findings(ws, [_dep(id="C-3", file="src/vendor/thing.go")])
+    promote_deps(ws)
+    f = read_findings(ws)[0]
+    assert f.status is FindingStatus.CONFIRMED
+    assert f.reachability == {"reachable": None, "blocker": None, "chain": []}
 
 
 def test_promote_runtime_dependent(tmp_path):

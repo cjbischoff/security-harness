@@ -153,3 +153,12 @@ against: aem-analytics (product module), aem-event-service + tanium-aem-analytic
   of the CE-spoof finding. High-value catch.
 - ✅ redteam-adversary caught a payload that claimed 3 privileges were TaaS-grantable when only
   1 is `unrestrictedInTaas`, and merged a redundant finding (BIZ-0001 → AUTHZ-0001).
+
+## Corrections (2026-08-07, verified in source)
+
+- 🔴 **gate warns-not-fails on schema-type violation — WITHDRAWN**: a `| tail; echo $?` pipe masked the real exit; `finding.schema.json:39-41` types `runtime_test`/`reachability` and `findings_gate.main` returns exit 1 on a violation. No code change needed.
+- 🟠 **`severity: informational` rejected by enum — as-designed**: `Severity.INFO='info'` exists; `informational` is a *status* value an agent wrongly put in `severity`. Fixed by prompt guard (Plan 2 T4), not an enum change.
+- 🔴 **`calibrate` never scores needs-deployment-testing — confirmed real**, fixed in Plan 2 T1.
+- 🔴 **judge severity-cap not applied — confirmed real**, fixed in Plan 2 T2 (lower-only).
+- 🟡 **deps not auto-promoted — confirmed real**, fixed in Plan 2 T3. `promote_runtime_dependent` was already auto-called (ISSUE-027 done).
+- 🟡 **same candidate routed to two agents — operator error, not a code bug**: `partition` assigns one `cls` per candidate; the double-dispatch was a hand-authored orchestration mistake. Guarded by the SKILL one-candidate-one-agent rule (Plan 2 T4).

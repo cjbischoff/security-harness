@@ -1,5 +1,10 @@
 """Tests for deterministic risk calibration."""
 
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
 from sec_harness.calibrate import calibrate_findings, calibrate_score
 from sec_harness.models import Finding, FindingStatus, Severity
 from sec_harness.workspace import Workspace, read_findings, write_findings
@@ -203,3 +208,58 @@ def test_malformed_cvss_does_not_crash_batch(tmp_path):
     by_id = {f.id: f for f in read_findings(ws)}
     assert by_id["G"].risk_score == 9          # good finding scored normally
     assert by_id["B"].risk_score is not None    # bad-vector finding fell back to heuristic, not crash
+
+
+def _f_ndt(**kw: Any) -> Finding:
+    """Helper to create findings with keyword-only args (for NDT tests)."""
+    base: dict[str, Any] = {"id": "F-1", "rule_id": "r", "cls": "authz", "status": FindingStatus.CONFIRMED,
+                            "severity": Severity.MEDIUM, "file": "a.py", "line": 1, "message": "m",
+                            "evidence_sources": ["semgrep:rule"]}
+    base.update(kw)
+    return Finding(**base)
+
+
+def test_scores_needs_deployment_testing(tmp_path: Path):
+    """needs-deployment-testing findings should be scored like confirmed."""
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    write_findings(ws, [_f_ndt(id="NDT-1", status=FindingStatus.NEEDS_DEPLOYMENT_TESTING,
+                               severity=Severity.HIGH, evidence_sources=["structural-index:callers"])])
+    n = calibrate_findings(ws)
+    out = {f.id: f for f in read_findings(ws)}
+    assert out["NDT-1"].risk_score is not None
+    assert out["NDT-1"].risk_score >= 6  # high severity floor
+    assert n >= 1
+
+
+def test_still_scores_confirmed(tmp_path: Path):
+    """Confirmed findings continue to be scored."""
+    ws = Workspace(tmp_path / "ws"); ws.ensure()
+    write_findings(ws, [_f_ndt(id="C-1", severity=Severity.MEDIUM)])
+    calibrate_findings(ws)
+    assert read_findings(ws)[0].risk_score is not None
+
+
+def test_judge_downgrade_lowers_below_severity_floor(tmp_path: Path):
+    ws = Workspace(tmp_path)
+    ws.ensure()
+    # HIGH severity (floor 6) but 3 strong preconditions drive derived score low,
+    # and the judge said the severity is inflated -> score should follow derived, not the floor.
+    write_findings(ws, [_f_ndt(id="J-1", severity=Severity.HIGH, judge_verdict="severity-inflated",
+                               preconditions=["requires admin", "non-default config", "chained from prior primitive"],
+                               evidence_sources=["semgrep:rule"])])
+    calibrate_findings(ws)
+    f = read_findings(ws)[0]
+    assert f.risk_score is not None
+    assert f.risk_score < 6, "judge severity-inflated must drop below the HIGH floor"
+    assert any(h.get("event") == "calibrate:judge-downgrade-applied" for h in f.history)
+
+
+def test_judge_uphold_does_not_lower(tmp_path: Path):
+    ws = Workspace(tmp_path)
+    ws.ensure()
+    write_findings(ws, [_f_ndt(id="U-1", severity=Severity.HIGH, judge_verdict="uphold",
+                               evidence_sources=["semgrep:rule"])])
+    calibrate_findings(ws)
+    result = read_findings(ws)[0].risk_score
+    assert result is not None
+    assert result >= 6  # floor intact

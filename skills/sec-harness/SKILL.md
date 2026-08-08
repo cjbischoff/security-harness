@@ -221,6 +221,7 @@ Run AFTER the KB build. Prerequisites in the workspace: `kb/scan-profile.json`,
    silently dropped. The rule-id router in `clsmap` now maps the common vendored
    `lang.security.*` rules to their real class, but the safety net still catches
    the rest.
+   **One candidate, one agent.** Each candidate's `cls` routes it to exactly one investigate agent (`partition_candidates_by_class`). Never hand the same candidate/file to two class agents in parallel — concurrent writers to one finding file race (last-writer-wins). If a candidate looks cross-class, pick the primary class; the others hunt by shape.
    **Robustness (fan-out under provider load):** the one-message fan-out maximizes
    simultaneous API load; a transient 429/529 can wipe the whole batch, and agents
    write findings only when they finish, so mid-run crashes lose the batch's work.
