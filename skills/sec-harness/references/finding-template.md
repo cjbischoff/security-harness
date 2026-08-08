@@ -31,6 +31,33 @@ the prose never drifts from the data:
   primary in full and list the sibling `file:line`s under Mechanism; never repeat
   all 9 sections per instance.
 
+## Triage line (skim layer — render first)
+One row per finding, risk-ordered, real leads (needs-runtime + higher risk) above dep CVEs:
+`ID · Risk · what (one clause of message) · file:line · status (confirmed | needs-runtime) · next action`.
+A reader opens this first and expands into the detail views below on demand.
+
+## NDT-view (needs-deployment-testing findings)
+Condensed, always labeled **needs runtime proof**, never described as confirmed. Bindings:
+| Part | Finding fields |
+|---|---|
+| What | `message`, `file:line` |
+| Source-side chain | `dataflow` |
+| Preconditions (out-of-repo barrier) | `preconditions` |
+| Runtime test | `runtime_test.objective` + `expected_signal.secure/insecure` |
+Runnable payloads + telemetry live in `redteam-plan.md`; the view links there.
+
+## Dep-view (`cls == deps`)
+Dependency findings do not use the source-flow sections. Bindings:
+| Part | Finding fields |
+|---|---|
+| Package | `evidence` (`package@version`) |
+| Advisory | `rule_id` / `evidence_sources` (OSV id) |
+| Reachability | `reachability.reachable` + `reachability.blocker` |
+| Fix | bump the package to a release resolving the advisory |
+
+Depth-tiers note: the condensed (Medium/Low) tier **renumbers 1–4** (Summary, Mechanism,
+Severity, Fix) — it does not preserve the full-tier section numbers, so no gaps leak into the view.
+
 ---
 
 ## 1. Summary

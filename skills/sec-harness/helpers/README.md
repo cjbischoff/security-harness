@@ -180,6 +180,13 @@ interrupted run can resume, and multi-pass campaigns know what's already done.
 | `coverage_guide.py` | Auto-stop condition for multi-pass campaigns (coverage-complete AND yield-below-threshold). |
 | `discovery_ledger.py` | Loop-until-dry saturation state: stop after K consecutive waves add no new fingerprints. |
 
+---
+
+## Test coverage & contracts
+
+The `tests/` folder houses ~75 files, ~470 tests. Key structural guards:
+- `test_docs_invariants.py` enforces documentation contracts: prompt-constants block presence, `finding-template.md` sections (triage line, NDT-view, dep-view, reachability, renumber), and agent prompt rules (determinism, tool receipt trust, evidence chains). Regression-tested so template drift is caught early.
+
 ### Hunting aids & tuning
 | Module | Purpose |
 |--------|---------|
