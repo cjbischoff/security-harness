@@ -117,9 +117,11 @@ a guessed one.
 
 #### `finding-template.md` — the shape of a human-readable finding
 The 9-section report template (full depth for critical/high, condensed for medium/low),
-bound field-by-field to the `Finding` record. This is *not* injected into an agent — it is
-**rendered by** `helpers/…/report.py:render_finding()`, which fills the sections from a
-finding's JSON fields.
+bound field-by-field to the `Finding` record. Includes three view subsections: **Triage line**
+(one row per finding, skim layer, strictly risk-ordered by `_risk_sort_key`), **NDT-view** (needs-deployment-testing condensed rendering),
+and **Dep-view** (dependency findings with reachability/blocker bindings). The condensed tier
+renumbers 1–4 with no gaps. This is *not* injected into an agent — it is **rendered by**
+`helpers/…/report.py:render_finding()`, which fills the sections from a finding's JSON fields.
 
 #### `DETECTION_COVERAGE.md` — an honest "what we can and can't see" statement
 A falsifiable statement of what each backend covers per class/language, and known blind
