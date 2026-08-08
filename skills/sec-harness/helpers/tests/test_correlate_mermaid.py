@@ -1,6 +1,7 @@
 from sec_harness.correlate.edges import Edge
 from sec_harness.correlate.manifest import Manifest, Member
-from sec_harness.correlate.mermaid import _node_id, component_graph
+from sec_harness.correlate.mermaid import _node_id, attack_chain_graph, component_graph
+from sec_harness.correlate.rethreshold import CorrelationVerdict
 
 
 def _manifest():
@@ -39,3 +40,28 @@ def test_component_graph_draws_shared_dependency_dashed():
                   key="GHSA-1", detail={"reachability": {}})]
     out = component_graph(m, edges)
     assert "-.->|GHSA-1|" in out
+
+
+def test_attack_chain_draws_promote_chain_with_status_class():
+    edges = [Edge(type="control-enforces", members=["rbac#.", "svc#x"], key="read data",
+                  detail={"join": "deterministic", "from": "rbac#.:a.ts:1:read data",
+                          "to": "svc#x:h.go:9:authz"})]
+    v = CorrelationVerdict(finding_ref="rbac#.:a.ts:1:read data",
+                           base_status="needs-deployment-testing",
+                           correlated_status="confirmed", direction="promote", edge="read data",
+                           evidence_chain=["svc#x: svc#x:h.go:9:authz"], confidence="high")
+    out = attack_chain_graph([v], edges)
+    assert out.startswith("flowchart LR")
+    assert _node_id("rbac#.:a.ts:1:read data") in out
+    assert _node_id("svc#x:h.go:9:authz") in out
+    assert "class " in out and "confirmed" in out
+    assert out == attack_chain_graph([v], edges)      # deterministic
+
+
+def test_attack_chain_omits_coverage_gap():
+    v = CorrelationVerdict(finding_ref="r#.:a:1:x", base_status="needs-deployment-testing",
+                           correlated_status="needs-deployment-testing", direction="coverage-gap",
+                           edge=None, evidence_chain=[], confidence="low")
+    out = attack_chain_graph([v], [])
+    assert out.strip() == "flowchart LR\nclassDef confirmed fill:#f88;\n" \
+        "classDef rejected fill:#ccc;\nclassDef ndt fill:#fc8;".strip() or "-->" not in out

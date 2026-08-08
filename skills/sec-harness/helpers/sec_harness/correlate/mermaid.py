@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from sec_harness.correlate.edges import Edge
 from sec_harness.correlate.manifest import Manifest
+from sec_harness.correlate.rethreshold import CorrelationVerdict
 
 _UNSAFE = re.compile(r"[^0-9a-zA-Z]+")
 
@@ -61,4 +62,46 @@ def component_graph(manifest: Manifest, edges: list[Edge]) -> str:
                 x, y = _node_id(mem[i]), _node_id(mem[i + 1])
                 links.append(f"  {x} -.->|{e.key}| {y}")
     lines.extend(sorted(set(links)))
+    return "\n".join(lines) + "\n"
+
+
+_STATUS_CLASS = {"confirmed": "confirmed", "rejected": "rejected"}
+_CLASSDEFS = [
+    "classDef confirmed fill:#f88;",
+    "classDef rejected fill:#ccc;",
+    "classDef ndt fill:#fc8;",
+]
+
+
+def attack_chain_graph(verdicts: list[CorrelationVerdict], edges: list[Edge]) -> str:
+    """Emit a mermaid graph of cross-repo attack chains (source finding → resolving enforcer).
+
+    One chain per verdict whose ``direction`` landed an edge (promote/weaken/demote); the sink is
+    the resolving edge's ``detail["to"]`` (else the first evidence-chain entry, else the edge
+    key). Nodes are classed by ``correlated_status``. ``coverage-gap`` verdicts draw no chain.
+    Output is deterministic (verdicts sorted by finding_ref).
+
+    Args:
+        verdicts: All correlation verdicts.
+        edges: All edges (used to resolve the sink for a verdict's edge key).
+
+    Returns:
+        A mermaid ``flowchart LR`` document as a string.
+    """
+    to_by_key = {e.key: e.detail.get("to", "") for e in edges if e.type == "control-enforces"}
+    lines = ["flowchart LR"]
+    chains: list[str] = []
+    node_class: dict[str, str] = {}
+    for v in sorted(verdicts, key=lambda x: x.finding_ref):
+        if v.direction not in ("promote", "weaken", "demote"):
+            continue
+        sink = to_by_key.get(v.edge or "") or (
+            v.evidence_chain[0] if v.evidence_chain else (v.edge or "sink"))
+        src_id, sink_id = _node_id(v.finding_ref), _node_id(sink)
+        chains.append(f"  {src_id} --> {sink_id}")
+        node_class[src_id] = _STATUS_CLASS.get(v.correlated_status, "ndt")
+    lines.extend(sorted(set(chains)))
+    for nid in sorted(node_class):
+        lines.append(f"  class {nid} {node_class[nid]}")
+    lines.extend(f"  {d}" for d in _CLASSDEFS)
     return "\n".join(lines) + "\n"
