@@ -158,6 +158,22 @@ def render_ndt(f: Finding) -> str:
     return "\n".join(out)
 
 
+def _triage_row(f: Finding, status_label: str, action: str) -> str:
+    """Render one triage table row: id, risk, one-clause what, location, status, next action.
+
+    Args:
+        f: The finding.
+        status_label: ``confirmed`` or ``needs-runtime``.
+        action: The next action phrase.
+
+    Returns:
+        A single Markdown table row string (pipe-delimited).
+    """
+    what = (f.message or "").split("|", 1)[0].split(".")[0].strip()[:80]
+    risk = f.risk_score if f.risk_score is not None else "-"
+    return f"| {f.id} | {risk} | {what} | {f.file}:{f.line} | {status_label} | {action} |"
+
+
 def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = None,
                 needs_deployment: list[Finding] | None = None,
                 coverage: dict | None = None, coverage_ledger: dict | None = None,
@@ -165,13 +181,16 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
                 patch_statuses: dict[str, PatchStatus] | None = None) -> str:
     """Render findings and optional token accounting as Markdown.
 
-    The findings table includes Risk (calibrated 1-10 score) and Verification
-    columns; missing values render as ``-``.
+    Structure: Bottom line → Triage table → Needs runtime proof section →
+    Confirmed section → Coverage / redteam link / coverage-ledger / token-spend tail.
+    NDT findings are NEVER folded into confirmed counts; the ``Needs runtime proof``
+    line is never 0 when ``needs_deployment`` is non-empty.
 
     Args:
-        findings: Findings to render.
+        findings: Confirmed/fixed findings to render.
         token_spend: Optional per-phase token totals.
-        needs_deployment: Findings real-but-unprovable from source alone.
+        needs_deployment: Findings real-but-unprovable from source alone. Reported
+            separately, never counted as confirmed.
         coverage: Optional ``compute_coverage`` output (``kb/coverage.json``); when given,
             appends a "Coverage & limitations" section so a clean scan carries its
             denominator (O-007/O-033). Omitted entirely when ``None``.
@@ -185,43 +204,63 @@ def to_markdown(findings: list[Finding], token_spend: dict[str, int] | None = No
     Returns:
         A Markdown report string.
     """
-    ordered = sorted(findings, key=lambda f: (_ORDER[f.severity.value], f.id))
-    counts = Counter(f.severity.value for f in findings)
-    lines = ["# sec-harness Report", "", "## Summary", ""]
-    lines += [f"- **{sev}**: {counts.get(sev, 0)}" for sev in _ORDER]
-    lines += ["", "## Findings", "",
-              "| ID | Class | Severity | Risk | Location | Verification | Message |",
-              "|----|-------|----------|------|----------|--------------|---------|"]
-    for f in ordered:
-        risk = f.risk_score if f.risk_score is not None else "-"
-        verification = f.verification if f.verification is not None else "-"
-        lines.append(
-            f"| {f.id} | {f.cls} | {f.severity.value} | {risk} | "
-            f"{f.file}:{f.line} | {verification} | {f.message} |"
-        )
-    if ordered:
-        lines += ["", "## Detailed findings", ""]
-        for f in ordered:
+    def _sort_key(f: Finding) -> tuple[int, int, str]:
+        return (-(f.risk_score or 0), _ORDER.get(f.severity.value, 9), f.id)
+
+    ndt = sorted(needs_deployment or [], key=_sort_key)
+    conf = sorted(findings, key=_sort_key)
+
+    # Bottom line — confirmed counts exclude NDT entirely (epistemic honesty)
+    conf_counts = Counter(f.severity.value for f in findings)
+    crit = conf_counts.get("critical", 0)
+    high = conf_counts.get("high", 0)
+    med = conf_counts.get("medium", 0)
+    low = conf_counts.get("low", 0)
+    total_conf = sum(conf_counts.values())
+    if total_conf == 0:
+        summary_sentence = "No source-provable findings."
+    elif crit or high:
+        summary_sentence = f"{'Critical' if crit else 'High'}-severity source-provable findings require immediate remediation."
+    else:
+        summary_sentence = "Source-provable findings at medium/low severity."
+    lines = [
+        "# sec-harness Report", "",
+        f"**Bottom line.** {summary_sentence}  ",
+        f"Confirmed: {crit}/{high}/{med}/{low}",
+        f"Needs runtime proof: {len(ndt)}",
+        "",
+    ]
+
+    # Triage table — all findings merged, risk-ordered desc
+    all_triage = (
+        [(f, "needs-runtime",
+          "run redteam-plan test") for f in ndt]
+        + [(f, "confirmed",
+            "bump" if f.cls == "deps" else "apply fix (§ below)") for f in conf]
+    )
+    all_triage.sort(key=lambda t: _sort_key(t[0]))
+    lines += [
+        "## Triage", "",
+        "| ID | Risk | What | Location | Status | Next action |",
+        "|----|------|------|----------|--------|-------------|",
+    ]
+    for f, status_label, action in all_triage:
+        lines.append(_triage_row(f, status_label, action))
+    lines.append("")
+
+    # Needs runtime proof section (NDT only, leads above confirmed)
+    if ndt:
+        lines += ["## Needs runtime proof — the real leads", ""]
+        for f in ndt:
+            lines += [render_ndt(f), "---", ""]
+
+    # Confirmed section
+    if conf:
+        lines += ["## Confirmed (source-provable)", ""]
+        for f in conf:
             lines += [render_finding(f, patch_status=(patch_statuses or {}).get(f.id)),
                       "---", ""]
-    if needs_deployment:
-        # F9: real-but-unprovable-from-source — reported separately, NOT confirmed,
-        # NOT a false positive. Never fudge these into the confirmed count/severity.
-        lines += ["", "## Needs deployment testing (unconfirmable from source)", "",
-                  ("_Real leads whose confirmation requires infra/config/secrets not in "
-                   "the repo. Verify in a deployed environment; not counted as confirmed._"),
-                  ""]
-        settled = [f for f in needs_deployment if f.dataflow and f.preconditions]
-        incomplete = [f for f in needs_deployment if not (f.dataflow and f.preconditions)]
-        for heading, group in (("Code-settled, runtime-impact-pending", settled),
-                               ("Verification-incomplete", incomplete)):
-            lines += [f"### {heading}", "",
-                      "| ID | Class | Severity | Location | Why unconfirmable |",
-                      "|----|-------|----------|----------|-------------------|"]
-            for f in sorted(group, key=lambda f: f.id):
-                lines.append(f"| {f.id} | {f.cls} | {f.severity.value} | "
-                             f"{f.file}:{f.line} | {f.message} |")
-            lines.append("")
+
     if coverage:
         lines += ["", "## Coverage & limitations", "",
                   ("_SAST coverage by language. `none` = no mechanical dataflow OR pattern "
