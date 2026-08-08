@@ -109,7 +109,7 @@ T1. **Tier-1 substrate** (no LLM) — `python -m sec_harness.graph build --targe
 13.5 **Red Team** (sonnet + opus adversary) — `agents/redteam.md` sets `runtime_disposition` +
     `runtime_test` on confirmed findings; `agents/redteam-adversary.md` pressure-checks the plan;
     `python -m sec_harness.redteam --workspace <WS>` renders `redteam-plan.md`. See **Phase 5.5**.
-14. **Report** (no LLM) — `python -m sec_harness.report --workspace <WS>` → final `report.sarif` + `report.md` (confirmed/fixed only, with risk + verification); points at `redteam-plan.md`.
+14. **Report** (no LLM) — `python -m sec_harness.report --workspace <WS>` → final `report.sarif` + `report.md` (confirmed/fixed only, with risk + verification); points at `redteam-plan.md`. Report auto-builds `kb/coverage-ledger.json` from `attack_surface × finding status` when absent (`coverage_ledger.build_coverage_ledger`); a class with no confirmed/NDT finding blocks `completeness==complete`. `findings.json` now carries confirmed/fixed **and** needs-deployment-testing findings (distinguished by `status`).
 
 For repeat passes see **Phase 6** (incremental scoping + carry-forward). The per-phase
 sections below detail each step.
