@@ -42,6 +42,6 @@ def test_correlate_combiner_prompt_exists_and_carries_rules():
     assert "narrative" in txt                        # fills narrative markers only
     assert "must not" in txt and ("mermaid" in txt or "diagram" in txt)  # don't touch diagrams
     assert "evidence_chain" in txt or "evidence chain" in txt            # cite provenance
-    assert "$shell_var" in txt or "shell_var" in txt or "never" in txt   # no literal secrets
+    assert "$shell_var" in txt or "shell_var" in txt                     # no literal secrets
     for slot in ("architecture", "threat_model", "redteam", "findings"):
         assert slot in txt.replace("-", "_")         # names the four docs
