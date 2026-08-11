@@ -173,7 +173,7 @@ they never confirm a finding.
 
 | File | Read by | What it decides |
 |------|---------|-----------------|
-| `finding.schema.json` | `findings_gate.py` | Every `findings/*.json` must validate: required fields, `status`/`severity` enums, and the hard rule that `confirmed`/`fixed` findings carry ≥1 tool receipt. |
+| `finding.schema.json` | `findings_gate.py` | Every `findings/*.json` must validate: required fields, `status`/`severity` enums, optional-field types (including `open_questions`), and the hard rule that `confirmed`/`fixed` findings carry ≥1 tool receipt. |
 | `scan-profile.schema.json` | `profile.py` | `kb/scan-profile.json` shape (languages, frameworks, attack_surface, sast_plan, agents_to_spawn, budget_hint, optional scan_options). |
 | `fix-disposition.schema.json` | `fix_disposition.py` | Fix-completeness records (FULL/MITIGATION/WORKAROUND + gates/evidence/rationale). |
 | `coverage-ledger.schema.json` | `coverage_ledger.py` | The surface-completeness ledger (`completeness`, `surfaces`, `deferred`, `open_questions`). |

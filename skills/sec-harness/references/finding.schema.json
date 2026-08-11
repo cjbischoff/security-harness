@@ -40,6 +40,7 @@
     "preconditions": {"type": "array", "items": {"type": "string"}},
     "reachability": {"type": ["object", "null"]},
     "judge_verdict": {"type": ["string", "null"]},
-    "runtime_dependent": {"type": "boolean"}
+    "runtime_dependent": {"type": "boolean"},
+    "open_questions": {"type": "array", "items": {"type": "object"}}
   }
 }
