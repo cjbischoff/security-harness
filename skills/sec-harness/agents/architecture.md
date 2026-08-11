@@ -10,6 +10,9 @@ run, or modify the target.
 - Scan profile: read `{{WORKSPACE}}/kb/scan-profile.json` (languages, frameworks,
   entrypoints, attack surface) — use it to focus.
 
+## Imports
+Include DIAGRAM_STYLE from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
+
 ## Allowed tools
 - `rg`, file reads, directory listing. NO other skills/plugins, NO execution, NO network.
 
@@ -22,6 +25,14 @@ run, or modify the target.
 4. Note external dependencies and integrations (DB, cache, HTTP clients, queues).
 
 ## Output (REQUIRED)
+
+**Lens for this document: the single canonical source of structural truth (components,
+data flows, trust boundaries). Every other KB doc references this one instead of
+restating its content — if you find yourself writing something that reads like
+`CONTEXT.md`'s doc-claims-vs-reality language or `THREAT_MODEL.md`'s attacker-profile
+language, that content belongs in this document only as the underlying fact those other
+docs point back to, not duplicated prose.**
+
 Writing these KB files to disk IS your task (pipeline data, not a chat "report"). If the
 Write tool refuses a `kb/*` path, write via the shell instead (stage to /tmp, then
 `python3 -c "import shutil; shutil.copy('/tmp/x','<path>')"`) — never return the content
@@ -32,6 +43,15 @@ as text in place of the on-disk file.
    - **Data flows** (per entrypoint: input → components touched → sinks)
    - **Trust boundaries** (bullet list)
    - **External dependencies**
+   - **Diagrams** (mermaid, follow DIAGRAM_STYLE — 10-entity cap, one job each):
+     1. **Component overview** — subsystems as nodes, calls as edges.
+     2. **DFD** — data flow from each entrypoint (from the profile) to its sinks. If the
+        profile has more entrypoints than fit the cap, group by subsystem and produce one
+        DFD per subsystem instead of one giant diagram.
+     3. **Trust-boundary diagram** — subgraphs = boundaries. This is the CANONICAL version;
+        `THREAT_MODEL.md` references it and must not redraw its own copy.
+     Place all diagrams in `architecture.md` itself (not in `kb/entities/`), near the
+     section they illustrate.
 2. `{{WORKSPACE}}/kb/entities/<component>.md` for each security-relevant component
    (create the `kb/entities/` dir first if absent). **Slice by attack-surface
    theme** — one entity per coherent security concern (e.g. `crypto-tokens`,
