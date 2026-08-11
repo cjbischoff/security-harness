@@ -58,7 +58,7 @@ real finding.
 After writing, the orchestrator spawns `agents/context-adversary.md` (opus, different family)
 to pressure-check this verification before any later phase consumes the context.
 
-## Cross-check claims against deployment config
+## Cross-check claims against deployment config (new)
 Before finalizing `verify_status`/`deployed_in` on any `claimed_control`, check
 whether any discovered `deployment_config` file (Pulumi/Terraform/Helm/k8s/
 docker-compose/serverless) states a flag or env var gating that control's
