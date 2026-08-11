@@ -20,7 +20,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 KINDS = ("trust_boundary", "claimed_control", "prior_finding", "attack_lead",
-         "source_pointer", "note")
+         "source_pointer", "deployment_config", "note")
 TRUST = ("untrusted-doc", "prior-scan")
 # Verification of a claimed control against code (C1 rework). "" = not yet verified.
 VERIFY_STATUS = ("", "PRESENT", "MISSING", "BYPASSABLE")
@@ -33,6 +33,12 @@ _CONTEXT_GLOBS = (
     "SECURITY.md", "SECURITY.markdown", "THREAT_MODEL.md", "THREATMODEL.md",
     "*security*review*.md", "*e2e-security*.md", "test-findings*.md",
     "claudedocs/**/*.md", "ARCHITECTURE.md", "CONTRIBUTING.md",
+)
+_DEPLOYMENT_CONFIG_GLOBS = (
+    "Pulumi.*.yaml", "Pulumi.*.yml", "*.tfvars", "terraform.tfvars",
+    "helm/**/values*.yaml", "helm/**/values*.yml",
+    "k8s/**/*.yaml", "k8s/**/*.yml",
+    "docker-compose*.yaml", "docker-compose*.yml", "serverless.yml", "serverless.yaml",
 )
 _DIAGRAM_TEXT_GLOBS = ("**/*.puml", "**/*.dot", "**/*.mmd")
 _DIAGRAM_IMAGE_GLOBS = ("**/*.puml.png", "**/*.puml.svg", "**/*.drawio.png")
@@ -52,6 +58,7 @@ class ContextItem:
     source_doc: str = ""  # the doc it came from
     verify_hint: str = ""  # for claimed_control: how to check it holds in code
     verify_status: str = ""  # C1 rework: PRESENT | MISSING | BYPASSABLE | "" (unverified)
+    deployed_in: str = ""  # which environment(s) this control/claim is actually active in
 
     def validate(self) -> list[str]:
         errs = []
@@ -110,7 +117,7 @@ def discover_context_files(repo_root: str | Path, scan_scope: str = ".") -> list
     """
     root = Path(repo_root)
     found: set[str] = set()
-    globs = _CONTEXT_GLOBS + _DIAGRAM_TEXT_GLOBS + _DIAGRAM_IMAGE_GLOBS
+    globs = _CONTEXT_GLOBS + _DEPLOYMENT_CONFIG_GLOBS + _DIAGRAM_TEXT_GLOBS + _DIAGRAM_IMAGE_GLOBS
     for pat in globs:
         for p in root.glob(pat):
             if p.is_file() and not any(s in p.parts for s in _SKIP):
@@ -162,6 +169,7 @@ def render_markdown(ctx: Context) -> str:
                         ("prior_finding", "Prior findings (re-check)"),
                         ("attack_lead", "Attack leads"),
                         ("source_pointer", "Source pointers"),
+                        ("deployment_config", "Deployment config"),
                         ("note", "Notes")):
         items = ctx.of_kind(kind)
         if not items:
