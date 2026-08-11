@@ -69,18 +69,24 @@ in the `claimed_control`'s `deployed_in` field, not just in prose.
 
 ## Output
 **Lens for this document: what the repo claims about itself, and whether that claim
-holds — never structural/architectural facts (those belong to `architecture.md`, which
-this document must not restate).**
+holds — not structural/architectural facts (those belong to `architecture.md`, which this
+document must not restate).** `trust_boundary` items are the one place structure meets
+trust, so they appear here — but only as the anchor a claim hangs on: CONTEXT.md records
+whether a claimed control AT that boundary holds up, never what the boundary IS
+structurally (components, data flow, call paths — `architecture.md`'s job).
 
 Write `{{WORKSPACE}}/kb/context.json` via the schema (build a `Context` of `ContextItem`s
 with `verify_status` and `deployed_in` set on claimed_controls, and `save` it), populate
 `provenance` (docs_read, prior_scans_read, sha), and write the `CTL-*` candidate findings.
 
-**Diagram (one, in `CONTEXT.md`):** a claimed-control status map — one small diagram
-(follow DIAGRAM_STYLE's 10-entity cap) showing each `claimed_control`'s `verify_status`
+**Diagram (one):** a claimed-control status map — one small diagram (follow
+DIAGRAM_STYLE's 10-entity cap) showing each `claimed_control`'s `verify_status`
 (PRESENT/MISSING/BYPASSABLE) grouped by the `trust_boundary` it relates to. This is a
 compliance-style view (claim vs. reality), not a structural diagram — do not draw
-components or data flow here.
+components or data flow here. Build it as a mermaid string (fenced ```` ```mermaid ````
+block) and set it on the `Context` object's `diagram` field BEFORE calling `save()`;
+`render_markdown` writes it into `CONTEXT.md` automatically. Never hand-edit `CONTEXT.md`
+— it is regenerated from `context.json` on every `save()`.
 
 ## Rules
 - Evidence-based: only list a boundary/control/lead the docs actually state + you located.

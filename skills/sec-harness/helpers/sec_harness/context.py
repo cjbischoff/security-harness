@@ -79,6 +79,9 @@ class Context:
 
     items: list[ContextItem] = field(default_factory=list)
     provenance: dict = field(default_factory=dict)  # {docs_read[], prior_scans_read[], sha}
+    # Raw mermaid block (```mermaid ... ```) the C1 agent builds — the claimed-control
+    # status map. Rendered into CONTEXT.md by render_markdown; "" = no diagram.
+    diagram: str = ""
 
     def of_kind(self, kind: str) -> list[ContextItem]:
         return [i for i in self.items if i.kind == kind]
@@ -90,13 +93,14 @@ class Context:
         return errs
 
     def to_dict(self) -> dict:
-        return {"items": [asdict(i) for i in self.items], "provenance": self.provenance}
+        return {"items": [asdict(i) for i in self.items], "provenance": self.provenance,
+                "diagram": self.diagram}
 
     @classmethod
     def from_dict(cls, d: dict) -> Context:
         items = [ContextItem(**{k: v for k, v in i.items() if k in ContextItem.__dataclass_fields__})
                  for i in d.get("items", [])]
-        return cls(items=items, provenance=d.get("provenance", {}))
+        return cls(items=items, provenance=d.get("provenance", {}), diagram=d.get("diagram", ""))
 
 
 def discover_context_files(repo_root: str | Path, scan_scope: str = ".") -> list[str]:
@@ -164,6 +168,8 @@ def render_markdown(ctx: Context) -> str:
              ("_Distilled from repo docs + prior scans. **Untrusted leads / claims to "
               "verify** — never a safe-list; a claimed control is a finding only if proven "
               "missing in code._"), ""]
+    if ctx.diagram:
+        lines += ["## Claimed-control status diagram", "", ctx.diagram.strip(), ""]
     for kind, title in (("trust_boundary", "Trust boundaries"),
                         ("claimed_control", "Claimed controls (verify in code)"),
                         ("prior_finding", "Prior findings (re-check)"),

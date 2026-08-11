@@ -173,6 +173,31 @@ def test_deployment_config_kind_is_valid_and_has_deployed_in_field():
     assert item.deployed_in == "prd"
 
 
+_DIAGRAM = "```mermaid\nflowchart LR\n  A[public ingress] --> B[authz: PRESENT]\n```"
+
+
+def test_render_markdown_includes_diagram_when_set():
+    c = _ctx()
+    c.diagram = _DIAGRAM
+    md = render_markdown(c)
+    assert "## Claimed-control status diagram" in md
+    assert "flowchart LR" in md
+
+
+def test_render_markdown_omits_diagram_section_when_empty():
+    md = render_markdown(_ctx())
+    assert "Claimed-control status diagram" not in md
+    assert "mermaid" not in md
+
+
+def test_save_load_round_trips_diagram(tmp_path):
+    ws = Workspace(tmp_path); ws.ensure()
+    c = _ctx(); c.diagram = _DIAGRAM
+    save(ws, c)
+    assert load(ws).diagram == _DIAGRAM
+    assert "## Claimed-control status diagram" in (ws.kb / "CONTEXT.md").read_text()
+
+
 def test_render_markdown_includes_deployment_config_section():
     c = Context(items=[
         ContextItem(kind="deployment_config", text="GITHUB_ENABLED=false in prd",
