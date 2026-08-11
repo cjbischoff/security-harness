@@ -72,7 +72,7 @@ flowchart TD
 ### Phase 1 — Context ingestion (C1)
 | Prompt | Model | Reads | Writes / does |
 |--------|-------|-------|---------------|
-| `context-ingest.md` | sonnet | repo docs/specs/ADRs/runbooks + prior scans | `kb/context.json` (trust-tagged); verifies each **claimed control** vs code → `PRESENT`/`MISSING`/`BYPASSABLE`; MISSING/BYPASSABLE become `CTL-####` candidate findings. |
+| `context-ingest.md` | sonnet | repo docs/specs/ADRs/runbooks + prior scans + IaC/deployment config | **doc-claims-vs-reality lens**: `kb/context.json` (trust-tagged); verifies each **claimed control** vs code → `PRESENT`/`MISSING`/`BYPASSABLE`; cross-checks deployment_config files to set `deployed_in` (which environment(s) the control is actually live in); MISSING/BYPASSABLE become `CTL-####` candidate findings. |
 | `context-adversary.md` | opus | `kb/context.json` + `CTL-*` findings | pressure-checks the *verification* (was a control really PRESENT in code, or just doc-asserted?); verdicts → `kb/gates/context.json`. |
 
 **Hard rule:** repo docs are **untrusted claims**. A doc never confirms a finding and never
