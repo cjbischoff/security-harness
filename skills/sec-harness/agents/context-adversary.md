@@ -33,6 +33,10 @@ For each verified `claimed_control`, ask:
    missed (alternate route, ordering, feature flag, unauth branch)?
 4. **Trust-contract breach?** Did any doc claim get treated as suppressing a real finding, or
    auto-confirming one? That is a hard violation.
+5. **Diagram consistency.** If `CONTEXT.md`'s claimed-control diagram (added per the
+   doc's new lens) shows a `verify_status` that contradicts the prose you're already
+   reviewing for that same control, flag it as a correction on that claim — same
+   WEAKENED/INVALIDATED verdict mechanism as any other claim, not a new check type.
 
 ## Output
 Return a verdict table (one row per claimed_control + one per `CTL-*` finding): id,

@@ -73,7 +73,7 @@ flowchart TD
 | Prompt | Model | Reads | Writes / does |
 |--------|-------|-------|---------------|
 | `context-ingest.md` | sonnet | repo docs/specs/ADRs/runbooks + prior scans + IaC/deployment config | **doc-claims-vs-reality lens**: `kb/context.json` (trust-tagged); verifies each **claimed control** vs code → `PRESENT`/`MISSING`/`BYPASSABLE`; cross-checks deployment_config files to set `deployed_in` (which environment(s) the control is actually live in); MISSING/BYPASSABLE become `CTL-####` candidate findings. |
-| `context-adversary.md` | opus | `kb/context.json` + `CTL-*` findings | pressure-checks the *verification* (was a control really PRESENT in code, or just doc-asserted?); verdicts → `kb/gates/context.json`. |
+| `context-adversary.md` | opus | `kb/context.json` + `CTL-*` findings | pressure-checks the *verification* (was a control really PRESENT in code, or just doc-asserted?) and diagram consistency against reviewed prose; verdicts → `kb/gates/context.json`. |
 
 **Hard rule:** repo docs are **untrusted claims**. A doc never confirms a finding and never
 suppresses one — it only produces leads to verify against code.
@@ -84,7 +84,7 @@ suppresses one — it only produces leads to verify against code.
 | `recon.md` | sonnet | target, `attack-classes.md`, context | `kb/scan-profile.json` (languages, frameworks, attack_surface, sast_plan, agents_to_spawn). Selects which `hunting/` docs apply. |
 | `architecture.md` | sonnet | scan-profile | `kb/architecture.md` (canonical structural source: components, data flows, trust boundaries, **3-diagram sequence** — component overview, DFD, trust-boundary) + `kb/entities/<component>.md`. All other KB docs reference this instead of restating structural content. |
 | `threat-model.md` | sonnet | the KB only (not raw repo) | `kb/THREAT_MODEL.md` — attacker profiles + prioritized hunt list + **two attacker-lens diagrams** (reachability + STRIDE-style threat diagram for top hunt item); trust boundaries are referenced to architecture.md, not restated. |
-| `phase-adversary.md` | opus | one phase's output + a deterministic ref-check | re-derives each claim from code; verdicts → `kb/gates/<phase>.json`. Runs after **each** of the three above. |
+| `phase-adversary.md` | opus | one phase's output + a deterministic ref-check | re-derives each claim from code and checks diagram consistency; verdicts → `kb/gates/<phase>.json`. Runs after **each** of the three above. |
 
 Before the opus adversary even runs, a deterministic pre-check (`helpers/…/phase_gate.py`)
 rejects any claim whose cited `file:line` doesn't resolve — a cheap, LLM-free first filter.
