@@ -88,7 +88,9 @@ class Finding:
             org policy, external config, an affected-version range — each
             ``{"question": str, "why_it_matters": str, "who_to_ask_or_check": str}``.
             Populated by trace (external-fact verify-errors) and redteam (when the
-            static/runtime discrimination surfaces a question, not a payload).
+            static/runtime discrimination surfaces a question, not a payload). Unrelated
+            to ``coverage_ledger``'s same-named ``open_questions`` list, which is a
+            differently-shaped surface-coverage concept, not per-finding questions.
     """
 
     id: str

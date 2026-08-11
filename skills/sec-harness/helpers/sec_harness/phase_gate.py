@@ -52,6 +52,12 @@ def _line_in_range(fp: Path, line: int) -> bool:
 
 
 _COMMENT_PREFIXES = ("//", "#", "*", "/*", "--", "<!--", ";", "%")
+# In prose files `#` is a heading and `*` a bullet, so the code-comment prefixes would flag
+# nearly every cited line. Only the HTML comment form is a real comment there.
+# ponytail: `#`/`*` still over-flag in code (Go pointer deref, doc-comment continuation) —
+# the cost is one extra adversary note, not a verdict change, so no per-language parser.
+_PROSE_SUFFIXES = (".md", ".markdown", ".rst", ".txt")
+_PROSE_COMMENT_PREFIXES = ("<!--",)
 
 
 def is_comment_line(root: str | Path, ref: str) -> bool | None:
@@ -86,7 +92,9 @@ def is_comment_line(root: str | Path, ref: str) -> bool | None:
     if not (1 <= line <= len(lines)):
         return None
     stripped = lines[line - 1].strip()
-    return stripped.startswith(_COMMENT_PREFIXES)
+    prefixes = (_PROSE_COMMENT_PREFIXES if path.lower().endswith(_PROSE_SUFFIXES)
+                else _COMMENT_PREFIXES)
+    return stripped.startswith(prefixes)
 
 
 def resolve_ref(root: str | Path, ref: str) -> tuple[bool, str | None]:
@@ -190,9 +198,12 @@ def run_phase_checks(claims: list[dict], target_root: str | Path) -> list[GateDe
             if not resolved:
                 reasons.append(f"ref does not resolve: {ref!r}" + (f" ({note})" if note else ""))
                 reject = True
-            elif note:
+                continue
+            # Independent checks: a basename-fallback ref is exactly the sloppy citation
+            # most likely to also land on a comment, so both notes can fire.
+            if note:
                 notes.append(note)
-            elif is_comment_line(target_root, ref):
+            if is_comment_line(target_root, ref):
                 notes.append(f"cited line is a comment, not executing code: {ref!r} — "
                               "do not treat as proof a control executes")
         if not refs:

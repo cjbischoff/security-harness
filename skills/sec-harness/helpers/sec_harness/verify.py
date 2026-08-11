@@ -189,7 +189,9 @@ def _check(
     )
 
 
-_PLACEHOLDER_VERSION_RE = re.compile(r"\bv?[XYZ]\.[XYZ]\.[XYZ]\b", re.IGNORECASE)
+# Case-sensitive on purpose: the placeholder convention is uppercase ``X.Y.Z``. Matching
+# case-insensitively flags real lowercase strings (e.g. a module path containing ``x.y.z``).
+_PLACEHOLDER_VERSION_RE = re.compile(r"\bv?[XYZ]\.[XYZ]\.[XYZ]\b")
 
 
 def _placeholder_version_bump(patch_diff: str) -> bool:
@@ -245,6 +247,10 @@ def verify_patch(
         flagged after a clean apply), or ``"static-only"`` (not detectable
         pre-patch, the backend is unavailable, or the patch failed to apply).
     """
+    # Cheap string check first: a placeholder-version deps bump can never be a real fix, so
+    # short-circuit before the pre-scan, the repo copy, and the patch apply.
+    if cls == "deps" and _placeholder_version_bump(patch_diff):
+        return "not-fixed"
     basename = os.path.basename(file)
     backend = _pick_backend(evidence_sources)
     rules = _source_rules(f"{backend}:", evidence_sources)
@@ -260,8 +266,6 @@ def verify_patch(
         shutil.copytree(target, repo, ignore=_copy_ignore)
         if not apply_patch(repo, patch_diff):
             return "static-only"
-        if cls == "deps" and _placeholder_version_bump(patch_diff):
-            return "not-fixed"
         post = _check(str(repo), config, basename, cls, rules, backend, language, db_dir)
         if post is None:
             return "static-only"
@@ -300,6 +304,9 @@ def verify_findings(
             (h for h in reversed(f.history) if str(h.get("event", "")).startswith("validate-fix:")),
             None,
         )
+        # Deliberately broad: ANY validate-fix verdict other than ``validate-fix:fixed``
+        # blocks promotion — including ``validate-fix:unverifiable``. An unverifiable fix is
+        # a verify-error, and a verify-error must never be laundered into a clean verdict.
         validate_fix_said_not_fixed = (
             last_validate_fix is not None
             and last_validate_fix.get("event") != "validate-fix:fixed"
@@ -309,6 +316,9 @@ def verify_findings(
             language=language, db_dir=db_dir,
         )
         if result == "verified-static" and validate_fix_said_not_fixed:
+            # Idempotent: re-running verify on the same finding must not pile up duplicates.
+            if f.history and f.history[-1].get("event") == "verify:conflict":
+                continue
             f.history.append({
                 "event": "verify:conflict",
                 "reason": ("deterministic re-scan found the signal gone, but validate-fix "

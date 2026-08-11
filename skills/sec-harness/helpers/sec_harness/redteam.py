@@ -245,7 +245,7 @@ def render_plan(
     all_findings = plan + below + settled
     questions = [f for f in all_findings if f.open_questions]
     out += ["", "## Questions to ask", "",
-            ("_Unknowns a live-exploit test can't settle -- org policy, external config, "
+            ("_Unknowns a live-exploit test can't settle — org policy, external config, "
              "an affected-version range. Answer these by asking the named person/team or "
              "checking the named system, not by testing the running application._"), ""]
     if questions:
