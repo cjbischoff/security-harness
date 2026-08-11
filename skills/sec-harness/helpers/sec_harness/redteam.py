@@ -164,6 +164,26 @@ def _directive_block(f: Finding, patch_status: PatchStatus | None = None) -> str
     return "\n".join(lines)
 
 
+def _question_block(f: Finding) -> str:
+    """Render one finding's ``open_questions`` as a Markdown bullet list.
+
+    Args:
+        f: The finding with open_questions to render.
+
+    Returns:
+        Newline-joined markdown lines with question details (id, class, question text,
+        why_it_matters, and who_to_ask_or_check).
+    """
+    lines = []
+    for q in f.open_questions:
+        lines.append(f"- **{f.id}** ({f.cls}): {q.get('question', '')}")
+        if q.get("why_it_matters"):
+            lines.append(f"  - Why it matters: {q['why_it_matters']}")
+        if q.get("who_to_ask_or_check"):
+            lines.append(f"  - Ask/check: {q['who_to_ask_or_check']}")
+    return "\n".join(lines)
+
+
 def render_plan(
     disc: dict, min_risk: int = DEFAULT_MIN_RISK,
     patch_statuses: dict[str, PatchStatus] | None = None,
@@ -222,6 +242,18 @@ def render_plan(
     out += ["", "## Static-settled (no runtime test needed)", "",
             (f"{len(settled)} confirmed finding(s) are source-provable and need no live test; "
              "see the main report.")]
+    all_findings = plan + below + settled
+    questions = [f for f in all_findings if f.open_questions]
+    out += ["", "## Questions to ask", "",
+            ("_Unknowns a live-exploit test can't settle — org policy, external config, "
+             "an affected-version range. Answer these by asking the named person/team or "
+             "checking the named system, not by testing the running application._"), ""]
+    if questions:
+        for f in questions:
+            out.append(_question_block(f))
+            out.append("")
+    else:
+        out.append("_none_")
     return "\n".join(out) + "\n"
 
 

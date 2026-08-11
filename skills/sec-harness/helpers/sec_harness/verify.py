@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -188,6 +189,38 @@ def _check(
     )
 
 
+# Case-sensitive on purpose: the placeholder convention is uppercase ``X.Y.Z``. Matching
+# case-insensitively flags real lowercase strings (e.g. a module path containing ``x.y.z``).
+_PLACEHOLDER_VERSION_RE = re.compile(r"\bv?[XYZ]\.[XYZ]\.[XYZ]\b")
+
+
+def _placeholder_version_bump(patch_diff: str) -> bool:
+    """True if an added diff line contains an obviously non-functional version
+    placeholder (e.g. ``vX.Y.Z``) instead of a real version number.
+
+    A patch that bumps a dependency to a literal template string will never
+    build; crediting it as "fixed" because the old vulnerable version string
+    is no longer text-matched by the SCA re-scan is a false clean. This is a
+    narrow, deliberately conservative heuristic — it only catches the
+    X/Y/Z-placeholder shape, not every possible non-functional diff.
+
+    Args:
+        patch_diff: The unified diff text.
+
+    Returns:
+        True if any added line (``+`` prefix, not ``+++``) matches the
+        placeholder-version pattern.
+    """
+    for line in patch_diff.splitlines():
+        if (
+            line.startswith("+")
+            and not line.startswith("+++")
+            and _PLACEHOLDER_VERSION_RE.search(line)
+        ):
+            return True
+    return False
+
+
 def verify_patch(
     target: str, patch_diff: str, config: str, file: str, cls: str,
     evidence_sources: list[str] | None = None,
@@ -214,6 +247,10 @@ def verify_patch(
         flagged after a clean apply), or ``"static-only"`` (not detectable
         pre-patch, the backend is unavailable, or the patch failed to apply).
     """
+    # Cheap string check first: a placeholder-version deps bump can never be a real fix, so
+    # short-circuit before the pre-scan, the repo copy, and the patch apply.
+    if cls == "deps" and _placeholder_version_bump(patch_diff):
+        return "not-fixed"
     basename = os.path.basename(file)
     backend = _pick_backend(evidence_sources)
     rules = _source_rules(f"{backend}:", evidence_sources)
@@ -263,10 +300,33 @@ def verify_findings(
     for f in findings:
         if f.status is not FindingStatus.CONFIRMED or not f.patch_diff:
             continue
+        last_validate_fix = next(
+            (h for h in reversed(f.history) if str(h.get("event", "")).startswith("validate-fix:")),
+            None,
+        )
+        # Deliberately broad: ANY validate-fix verdict other than ``validate-fix:fixed``
+        # blocks promotion — including ``validate-fix:unverifiable``. An unverifiable fix is
+        # a verify-error, and a verify-error must never be laundered into a clean verdict.
+        validate_fix_said_not_fixed = (
+            last_validate_fix is not None
+            and last_validate_fix.get("event") != "validate-fix:fixed"
+        )
         result = verifier(
             target, f.patch_diff, config, f.file, f.cls, f.evidence_sources,
             language=language, db_dir=db_dir,
         )
+        if result == "verified-static" and validate_fix_said_not_fixed:
+            # Idempotent: re-running verify on the same finding must not pile up duplicates.
+            if f.history and f.history[-1].get("event") == "verify:conflict":
+                continue
+            f.history.append({
+                "event": "verify:conflict",
+                "reason": ("deterministic re-scan found the signal gone, but validate-fix "
+                           f"explicitly said {last_validate_fix.get('event')!r} — leaving "
+                           "status/verification as validate-fix left them for human review"),
+            })
+            changed = True
+            continue
         f.verification = result
         changed = True
         if result == "verified-static":

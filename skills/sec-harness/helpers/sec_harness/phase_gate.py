@@ -51,6 +51,52 @@ def _line_in_range(fp: Path, line: int) -> bool:
     return 1 <= line <= n
 
 
+_COMMENT_PREFIXES = ("//", "#", "*", "/*", "--", "<!--", ";", "%")
+# In prose files `#` is a heading and `*` a bullet, so the code-comment prefixes would flag
+# nearly every cited line. Only the HTML comment form is a real comment there.
+# ponytail: `#`/`*` still over-flag in code (Go pointer deref, doc-comment continuation) —
+# the cost is one extra adversary note, not a verdict change, so no per-language parser.
+_PROSE_SUFFIXES = (".md", ".markdown", ".rst", ".txt")
+_PROSE_COMMENT_PREFIXES = ("<!--",)
+
+
+def is_comment_line(root: str | Path, ref: str) -> bool | None:
+    """True if ``ref``'s cited line is a comment, not executing code.
+
+    A citation resolving to a comment (e.g. ``// this control is enforced
+    elsewhere``) is not evidence the control actually executes — only that
+    someone wrote a claim about it. This is a cheap, language-agnostic
+    heuristic (leading-symbol match after stripping whitespace); it does not
+    replace the adversary's own judgment, it flags the citation for extra
+    scrutiny via a gate note.
+
+    Args:
+        root: Target repo root.
+        ref: A ``file:line`` reference (a bare path with no line returns
+            ``None`` — there's no single line to classify).
+
+    Returns:
+        ``True``/``False`` if the ref resolves to a concrete line, ``None``
+        if the ref doesn't resolve to a file or carries no line number.
+    """
+    path, line = _parse_ref(ref)
+    if not path or line is None:
+        return None
+    fp = Path(root) / path
+    if not fp.is_file():
+        return None
+    try:
+        lines = fp.read_text(errors="replace").splitlines()
+    except OSError:
+        return None
+    if not (1 <= line <= len(lines)):
+        return None
+    stripped = lines[line - 1].strip()
+    prefixes = (_PROSE_COMMENT_PREFIXES if path.lower().endswith(_PROSE_SUFFIXES)
+                else _COMMENT_PREFIXES)
+    return stripped.startswith(prefixes)
+
+
 def resolve_ref(root: str | Path, ref: str) -> tuple[bool, str | None]:
     """Resolve ``ref`` against ``root``, falling back to a basename search on nested repos.
 
@@ -152,8 +198,14 @@ def run_phase_checks(claims: list[dict], target_root: str | Path) -> list[GateDe
             if not resolved:
                 reasons.append(f"ref does not resolve: {ref!r}" + (f" ({note})" if note else ""))
                 reject = True
-            elif note:
+                continue
+            # Independent checks: a basename-fallback ref is exactly the sloppy citation
+            # most likely to also land on a comment, so both notes can fire.
+            if note:
                 notes.append(note)
+            if is_comment_line(target_root, ref):
+                notes.append(f"cited line is a comment, not executing code: {ref!r} — "
+                              "do not treat as proof a control executes")
         if not refs:
             reasons.append("no code refs to verify — sent to adversary on judgment alone")
         out.append(GateDecision(cid, "reject" if reject else "to-adversary", reasons,

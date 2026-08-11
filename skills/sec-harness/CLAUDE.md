@@ -230,7 +230,7 @@ read-only invariant is about the reviewed **source**, not this folder.
 ```
 kb/scan-profile.json     recon output: languages, frameworks, attack_surface, sast_plan, subsystems
 kb/architecture.md       component/data-flow/trust-boundary map + kb/entities/*.md
-kb/THREAT_MODEL.md       trust boundaries, attacker profiles, PRIORITIZED HUNT LIST
+kb/THREAT_MODEL.md       attacker profiles, prioritized hunt list (references architecture.md)
 kb/context.json          repo's own docs distilled (trust-tagged untrusted-doc / prior-scan)
 kb/gates/<phase>.json    adversary verdict audit trail per gated phase
 kb/discovery-ledger.json investigate saturation state (waves, consecutive_no_new, terminal_reason)

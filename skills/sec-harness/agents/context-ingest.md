@@ -4,7 +4,8 @@ You distill a repo's own security-relevant context into structured `context.json
 DRIVES the scan. READ-ONLY. You never build/run/modify the target.
 
 ## Imports
-Include ANTI_MANIPULATION + TOOL_TRUST + OUTPUT_WRITE_FALLBACK from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
+Include ANTI_MANIPULATION + TOOL_TRUST + OUTPUT_WRITE_FALLBACK + QUALIFIER_PROOF +
+DIAGRAM_STYLE + FIELD_OWNERSHIP from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
 
 ## Inputs
 - Target: `{{TARGET}}`  Workspace: `{{WORKSPACE}}`
@@ -29,6 +30,12 @@ Read the candidate docs (skim; open the security-relevant ones fully). Extract i
 - `prior_finding` — anything the docs/prior review already flagged (re-check it).
 - `attack_lead` — a concrete place worth investigating the docs point at.
 - `source_pointer` — topic → the source file the docs name (e.g. auth logic).
+- `deployment_config` — an IaC/deployment file (Pulumi/Terraform/Helm/k8s/docker-compose/
+  serverless) states a feature flag, env var, or config value that gates whether a
+  claimed_control or attack surface is actually active in a given environment. Set
+  `deployed_in` on the CORRESPONDING `claimed_control` item to name which environment(s)
+  it's live in (e.g. `"dev,stg"` if a flag is true there and false in prd) — do not
+  guess this from code alone if a deployment_config file states it explicitly.
 When the repo's docs are thin/structural (a directory tree, header comments, a bare README)
 rather than narrative, follow directory-comment breadcrumbs into the implementation files they
 name and record those as `attack_lead`/`source_pointer` items — do not treat the absence of
@@ -51,12 +58,35 @@ real finding.
 After writing, the orchestrator spawns `agents/context-adversary.md` (opus, different family)
 to pressure-check this verification before any later phase consumes the context.
 
+## Cross-check claims against deployment config (new)
+Before finalizing `verify_status`/`deployed_in` on any `claimed_control`, check
+whether any discovered `deployment_config` file (Pulumi/Terraform/Helm/k8s/
+docker-compose/serverless) states a flag or env var gating that control's
+subsystem. A control can be `PRESENT` in code and still be dark in a specific
+environment (or vice versa) — a doc-vs-reality mismatch missed here has
+twice cost a full adversary-review round-trip to catch. Record the finding
+in the `claimed_control`'s `deployed_in` field, not just in prose.
+
 ## Output
+**Lens for this document: what the repo claims about itself, and whether that claim
+holds — not structural/architectural facts (those belong to `architecture.md`, which this
+document must not restate).** `trust_boundary` items are the one place structure meets
+trust, so they appear here — but only as the anchor a claim hangs on: CONTEXT.md records
+whether a claimed control AT that boundary holds up, never what the boundary IS
+structurally (components, data flow, call paths — `architecture.md`'s job).
+
 Write `{{WORKSPACE}}/kb/context.json` via the schema (build a `Context` of `ContextItem`s
-with `verify_status` set on claimed_controls, and `save` it), populate `provenance` (docs_read,
-prior_scans_read, sha), and write the `CTL-*` candidate findings. Return a 3-5 line summary:
-how many trust boundaries / claimed controls (PRESENT/MISSING/BYPASSABLE) / leads / candidate
-findings written, and the single highest-value control gap.
+with `verify_status` and `deployed_in` set on claimed_controls, and `save` it), populate
+`provenance` (docs_read, prior_scans_read, sha), and write the `CTL-*` candidate findings.
+
+**Diagram (one):** a claimed-control status map — one small diagram (follow
+DIAGRAM_STYLE's 10-entity cap) showing each `claimed_control`'s `verify_status`
+(PRESENT/MISSING/BYPASSABLE) grouped by the `trust_boundary` it relates to. This is a
+compliance-style view (claim vs. reality), not a structural diagram — do not draw
+components or data flow here. Build it as a mermaid string (fenced ```` ```mermaid ````
+block) and set it on the `Context` object's `diagram` field BEFORE calling `save()`;
+`render_markdown` writes it into `CONTEXT.md` automatically. Never hand-edit `CONTEXT.md`
+— it is regenerated from `context.json` on every `save()`.
 
 ## Rules
 - Evidence-based: only list a boundary/control/lead the docs actually state + you located.

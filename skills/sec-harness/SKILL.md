@@ -201,8 +201,7 @@ are READ-ONLY over the target and call only binary tools (`rg`, file reads).
 2. **Architecture** (model: sonnet) — prompt `agents/architecture.md`. Reads the
    profile + repo, writes `kb/architecture.md` and `kb/entities/*.md`.
 3. **Threat model** (model: sonnet) — prompt `agents/threat-model.md`. Reads the KB
-   only, writes `kb/THREAT_MODEL.md` (trust boundaries, attacker profiles,
-   prioritized hunt list).
+   only, writes `kb/THREAT_MODEL.md` (attacker profiles, prioritized hunt list).
 
 **Phase completion + crash recovery:** a phase is done only when ALL its outputs
 exist AND `record_stage` ran — never infer completion from one file's presence

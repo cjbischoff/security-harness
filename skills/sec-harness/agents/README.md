@@ -72,8 +72,8 @@ flowchart TD
 ### Phase 1 — Context ingestion (C1)
 | Prompt | Model | Reads | Writes / does |
 |--------|-------|-------|---------------|
-| `context-ingest.md` | sonnet | repo docs/specs/ADRs/runbooks + prior scans | `kb/context.json` (trust-tagged); verifies each **claimed control** vs code → `PRESENT`/`MISSING`/`BYPASSABLE`; MISSING/BYPASSABLE become `CTL-####` candidate findings. |
-| `context-adversary.md` | opus | `kb/context.json` + `CTL-*` findings | pressure-checks the *verification* (was a control really PRESENT in code, or just doc-asserted?); verdicts → `kb/gates/context.json`. |
+| `context-ingest.md` | sonnet | repo docs/specs/ADRs/runbooks + prior scans + IaC/deployment config | **doc-claims-vs-reality lens**: `kb/context.json` (trust-tagged); verifies each **claimed control** vs code → `PRESENT`/`MISSING`/`BYPASSABLE`; cross-checks deployment_config files to set `deployed_in` (which environment(s) the control is actually live in); MISSING/BYPASSABLE become `CTL-####` candidate findings. The claimed-control status diagram is set on `Context.diagram` (a mermaid string) before `save()` — `CONTEXT.md` is regenerated from `context.json`, never hand-edited. |
+| `context-adversary.md` | opus | `kb/context.json` + `CTL-*` findings | pressure-checks the *verification* (was a control really PRESENT in code, or just doc-asserted?) and diagram consistency against reviewed prose; verdicts → `kb/gates/context.json`. |
 
 **Hard rule:** repo docs are **untrusted claims**. A doc never confirms a finding and never
 suppresses one — it only produces leads to verify against code.
@@ -82,9 +82,9 @@ suppresses one — it only produces leads to verify against code.
 | Prompt | Model | Reads | Writes |
 |--------|-------|-------|--------|
 | `recon.md` | sonnet | target, `attack-classes.md`, context | `kb/scan-profile.json` (languages, frameworks, attack_surface, sast_plan, agents_to_spawn). Selects which `hunting/` docs apply. |
-| `architecture.md` | sonnet | scan-profile | `kb/architecture.md` + `kb/entities/<component>.md` (components, data flows, trust boundaries). |
-| `threat-model.md` | sonnet | the KB only (not raw repo) | `kb/THREAT_MODEL.md` — attacker profiles + a **prioritized hunt list**. |
-| `phase-adversary.md` | opus | one phase's output + a deterministic ref-check | re-derives each claim from code; verdicts → `kb/gates/<phase>.json`. Runs after **each** of the three above. |
+| `architecture.md` | sonnet | scan-profile | `kb/architecture.md` (canonical structural source: components, data flows, trust boundaries, **3-diagram sequence** — component overview, DFD, trust-boundary) + `kb/entities/<component>.md`. All other KB docs reference this instead of restating structural content. |
+| `threat-model.md` | sonnet | the KB only (not raw repo) | `kb/THREAT_MODEL.md` — attacker profiles + prioritized hunt list + **two attacker-lens diagrams** (reachability + STRIDE-style threat diagram for top hunt item); trust boundaries are referenced to architecture.md, not restated. |
+| `phase-adversary.md` | opus | one phase's output + a deterministic ref-check | re-derives each claim from code and checks diagram consistency; verdicts → `kb/gates/<phase>.json`. Runs after **each** of the three above. |
 
 Before the opus adversary even runs, a deterministic pre-check (`helpers/…/phase_gate.py`)
 rejects any claim whose cited `file:line` doesn't resolve — a cheap, LLM-free first filter.
@@ -129,8 +129,8 @@ the agent doesn't re-raise known false positives.
 ### Phase 5.5 — Red team (static → runtime bridge)
 | Prompt | Model | Job |
 |--------|-------|-----|
-| `trace.md` | opus | backward-trace each confirmed sink to an entry point; verdict `reachable?` + blocker taxonomy. |
-| `redteam.md` | sonnet | split confirmed findings into `static-settled` vs `needs-runtime`; write a `runtime_test` block (objective, preconditions, `$SHELL_VAR` payloads — **never literal secrets**, expected signal, telemetry). |
+| `trace.md` | opus | backward-trace each confirmed sink to an entry point; verdict `reachable?` + blocker taxonomy; for external blockers, populate `open_questions` with human-answerable facts. |
+| `redteam.md` | sonnet | split confirmed findings into `static-settled` vs `needs-runtime`; write a `runtime_test` block (objective, preconditions, `$SHELL_VAR` payloads — **never literal secrets**, expected signal, telemetry); populate `open_questions` for facts only a human can supply. |
 | `redteam-adversary.md` | opus | strip items that are actually settleable from source, payloads not tied to a real sink, or claims resting on `llm-claimed` confidence alone. |
 
 The deterministic `helpers/…/redteam.py` then renders `redteam-plan.md` (only findings at/above
@@ -180,6 +180,12 @@ Each is **appended** to `investigate.md` / `patch.md` for that class and supplie
 
 Every agent wraps untrusted repo text in the trust envelope and imports the
 `references/prompt-constants.md` blocks — see [`../references/README.md`](../references/README.md).
+The agents most prone to cross-phase field writes import `FIELD_OWNERSHIP` to enforce
+phase field-ownership boundaries: `investigate.md`, `critic.md`, `validate.md`, `trace.md`,
+`patch.md`, `validate-fix.md`, `redteam.md`, `context-ingest.md`, `context-adversary.md`,
+`phase-adversary.md`, plus `architecture.md` / `threat-model.md` (which write no Finding
+fields, but consume the same ownership table when citing findings). Agents that never touch
+a finding record (`judge.md`, `recon.md`, `tune-config.md`, the `classes/` extensions) do not.
 
 ---
 

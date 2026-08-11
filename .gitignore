@@ -40,6 +40,9 @@ Thumbs.db
 
 # === Design docs / planning (kept local, not published) ===
 docs/
+# Exception: sec-harness skill design specs ARE tracked (brainstorming-skill specs)
+!skills/sec-harness/docs/
+!skills/sec-harness/docs/**
 
 # === GSD planning (kept local, not published) ===
 .planning/

@@ -92,7 +92,7 @@ interrupted run can resume, and multi-pass campaigns know what's already done.
 ### Data model & serialization — the frozen contract
 | Module | Purpose |
 |--------|---------|
-| `models.py` | The `Finding` and `CampaignState` dataclasses, the `Severity` / `FindingStatus` enums, and `to_dict`/`from_dict`. **This is the schema every phase reads and writes.** |
+| `models.py` | The `Finding` and `CampaignState` dataclasses, the `Severity` / `FindingStatus` enums, and `to_dict`/`from_dict`. **This is the schema every phase reads and writes.** Recent: `open_questions` field added (list of dicts with `question`, `why_it_matters`, `who_to_ask_or_check` keys; defaults to []) — unrelated to `coverage_ledger.py`'s same-named, differently-shaped `open_questions` list. |
 | `evidence.py` | The tool-receipt gate. `_MECHANICAL` = {semgrep, codeql, ast-grep, tree-sitter, ripgrep, structural-index, secrets, sca}; `is_tool_receipt()` returns False for anything `llm`-prefixed; `confidence_for()` grades HIGH/MEDIUM/LOW from the strongest evidence link. |
 | `schema.py` | A tiny stdlib-only JSON-Schema validator (type/enum/required/items/properties) — so schema validation needs no dependency. |
 
@@ -139,7 +139,7 @@ interrupted run can resume, and multi-pass campaigns know what's already done.
 | `partition.py` | Group candidates by attack class for parallel agent fan-out. |
 | `fp_feedback.py` | Recycle prior-pass rejections into the next pass's investigate/critic prompts as negative examples. |
 | `factcheck.py` | Post-investigation re-verification of citations/scope/severity against source. |
-| `phase_gate.py` | Deterministic pre-check for analysis phases (schema + `file:line` resolution) before the opus adversary runs; writes `kb/gates/<phase>.json`. |
+| `phase_gate.py` | Deterministic pre-check for analysis phases (schema + `file:line` resolution) before the opus adversary runs; writes `kb/gates/<phase>.json`. Detects comment-only citations via `is_comment_line()` and appends a gate note flagging them for extra scrutiny (prose files — `.md`/`.rst`/`.txt` — are skipped, since every Markdown heading would otherwise read as a comment); the comment check and the basename-fallback note are independent, so a sloppy citation can raise both. |
 | `stage_validate.py` | Per-stage structured-output validation + repair contract. |
 
 ### Scoring & prioritization
@@ -166,7 +166,7 @@ interrupted run can resume, and multi-pass campaigns know what's already done.
 | `workspace.py` | The on-disk layout (`kb/`, `findings/`, reports); per-finding read/write; `record_agent_return` / `read_agent_return`. |
 | `scanscope.py` | Resolve + pin `repo_root` + `scan_scope` once per campaign (monorepo-safe); `kb/scan-scope.json`. |
 | `kb.py` | Paths to the KB files (profile/architecture/threat-model/entities). |
-| `context.py` | Deterministic context ingestion (docs/specs/runbooks + prior scans), trust-tagged. |
+| `context.py` | Deterministic context ingestion (docs/specs/runbooks + prior scans), trust-tagged. Also discovers IaC/deployment-config files (Pulumi, Terraform, Helm, k8s, docker-compose, serverless) as `deployment_config` items, carrying a `deployed_in` env tag. `Context.diagram` holds the C1 agent's claimed-control status map (a raw mermaid block); `render_markdown` writes it into `CONTEXT.md`, which is regenerated on every `save()` and never hand-edited. |
 | `profile.py` | The `ScanProfile` contract; validate/load `kb/scan-profile.json`. |
 | `diffscope.py` | `changed_files(base, head)` — scope incremental passes to changed code. |
 | `githist.py` | Mine git history for likely security-fix commits to seed recon/context. |
@@ -199,12 +199,12 @@ The `tests/` folder houses ~75 files, ~470 tests. Key structural guards:
 ### Verification, safety & plumbing
 | Module | Purpose |
 |--------|---------|
-| `verify.py` | Apply a `patch_diff` to a **temp copy**, re-scan, confirm the finding is gone. Never touches the real target. CLI-callable. |
+| `verify.py` | Apply a `patch_diff` to a **temp copy**, re-scan, confirm the finding is gone. Never touches the real target. A `deps`-class patch that only bumps to an obviously non-functional placeholder version (e.g. `vX.Y.Z`) is rejected as `not-fixed` before the re-scan even runs (`_placeholder_version_bump`) — an SCA re-scan can't tell "real fix" from "text that no longer matches the old version string." `verify_findings` also never silently overwrites an explicit `validate-fix:not_fixed`-family verdict on a `CONFIRMED` finding: if the deterministic re-scan disagrees (says `verified-static`), it appends a `verify:conflict` history event (once — a re-run does not duplicate it) and leaves status/verification untouched for human review, instead of promoting to `FIXED`. The guard is deliberately broad: **any** `validate-fix:*` event other than `validate-fix:fixed` blocks promotion, `validate-fix:unverifiable` included — a verify-error is never laundered into a clean verdict. CLI-callable. |
 | `patch_status.py` | Deterministic check: is a patch actually applied to the real target vs only verified in isolation? |
 | `preflight.py` | Verify SAST binaries + vendored rules + CodeQL packs; print exact setup commands for what's missing (never installs). CLI-callable. |
 | `redactor.py` | Three-step secret redaction before any prompt send: mask → hard-verify no residual HIGH-confidence secret → **abort** if any remain. CLI-callable. |
 | `envelope.py` | Nonce-delimited wrapper for untrusted repo text inlined into prompts (injection-resistant). *(`import secrets` here is the stdlib module, unrelated to `secrets.py`.)* |
-| `redteam.py` | Render `redteam-plan.md` from findings marked `needs-runtime`, filtered by risk bar; includes markdown renderers `_bullets()` and `_signal()` for runtime directives (both accept list/dict *or* plain-string `runtime_test` values). The "static-settled" footer counts `disc["static_settled"]` (not the needs-runtime code-settled subset). CLI-callable. |
+| `redteam.py` | Render `redteam-plan.md` from findings marked `needs-runtime`, filtered by risk bar; includes markdown renderers `_bullets()` and `_signal()` for runtime directives (both accept list/dict *or* plain-string `runtime_test` values), and `_question_block()` to render `open_questions` from all statuses into a "Questions to ask" section. The "static-settled" footer counts `disc["static_settled"]` (not the needs-runtime code-settled subset). CLI-callable. |
 | `parse.py` | Fail-open JSON extraction from LLM prose/fences (largest balanced substring); returns None, never a silent empty. |
 | `gates.py` | Fail-closed gate orchestrator: a `GATE_ROUTING` table + `REQUIRED_GATES`; a missing gate result hard-fails. |
 | `cost.py` | Per-phase token accounting into `CampaignState.budget`; USD is an opt-in estimate, never rendered as measured. |

@@ -146,3 +146,63 @@ def test_manual_review_findings_from_attack_leads():
     assert f.evidence_sources == ["llm-claimed:doc-lead"]
     assert f.file == "internal/ci/deploy.go" and f.line == 88
     assert f.discovery_sha == "abc"
+
+
+def test_discover_finds_iac_deployment_files(tmp_path):
+    (tmp_path / "Pulumi.prd.yaml").write_text("config: {}\n")
+    (tmp_path / "terraform.tfvars").write_text("x = 1\n")
+    (tmp_path / "helm").mkdir()
+    (tmp_path / "helm" / "values-prod.yaml").write_text("x: 1\n")
+    (tmp_path / "k8s").mkdir()
+    (tmp_path / "k8s" / "deployment.yaml").write_text("x: 1\n")
+    (tmp_path / "docker-compose.prod.yaml").write_text("x: 1\n")
+    (tmp_path / "serverless.yml").write_text("x: 1\n")
+    found = discover_context_files(tmp_path)
+    assert "Pulumi.prd.yaml" in found
+    assert "terraform.tfvars" in found
+    assert "helm/values-prod.yaml" in found
+    assert "k8s/deployment.yaml" in found
+    assert "docker-compose.prod.yaml" in found
+    assert "serverless.yml" in found
+
+
+def test_deployment_config_kind_is_valid_and_has_deployed_in_field():
+    item = ContextItem(kind="deployment_config", text="GITHUB_ENABLED=false in prd",
+                        where="Pulumi.prd.yaml:150", deployed_in="prd")
+    assert item.validate() == []
+    assert item.deployed_in == "prd"
+
+
+_DIAGRAM = "```mermaid\nflowchart LR\n  A[public ingress] --> B[authz: PRESENT]\n```"
+
+
+def test_render_markdown_includes_diagram_when_set():
+    c = _ctx()
+    c.diagram = _DIAGRAM
+    md = render_markdown(c)
+    assert "## Claimed-control status diagram" in md
+    assert "flowchart LR" in md
+
+
+def test_render_markdown_omits_diagram_section_when_empty():
+    md = render_markdown(_ctx())
+    assert "Claimed-control status diagram" not in md
+    assert "mermaid" not in md
+
+
+def test_save_load_round_trips_diagram(tmp_path):
+    ws = Workspace(tmp_path); ws.ensure()
+    c = _ctx(); c.diagram = _DIAGRAM
+    save(ws, c)
+    assert load(ws).diagram == _DIAGRAM
+    assert "## Claimed-control status diagram" in (ws.kb / "CONTEXT.md").read_text()
+
+
+def test_render_markdown_includes_deployment_config_section():
+    c = Context(items=[
+        ContextItem(kind="deployment_config", text="GITHUB_ENABLED=false in prd",
+                    where="Pulumi.prd.yaml:150", deployed_in="prd"),
+    ])
+    md = render_markdown(c)
+    assert "Deployment config" in md
+    assert "GITHUB_ENABLED=false in prd" in md

@@ -84,6 +84,13 @@ class Finding:
         runtime_dependent: True when the only barrier to confirmation is data not in the
             repo (catalog contents, a live host, whether a committed secret is live). Marks
             a genuine runtime lead for ``campaign.promote_runtime_dependent`` (O-010/O-021).
+        open_questions: Human-answerable unknowns a live-exploit test can't settle —
+            org policy, external config, an affected-version range — each
+            ``{"question": str, "why_it_matters": str, "who_to_ask_or_check": str}``.
+            Populated by trace (external-fact verify-errors) and redteam (when the
+            static/runtime discrimination surfaces a question, not a payload). Unrelated
+            to ``coverage_ledger``'s same-named ``open_questions`` list, which is a
+            differently-shaped surface-coverage concept, not per-finding questions.
     """
 
     id: str
@@ -115,6 +122,7 @@ class Finding:
     reachability: dict | None = None
     judge_verdict: str | None = None
     runtime_dependent: bool = False
+    open_questions: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-safe dict (enums become their string values)."""
