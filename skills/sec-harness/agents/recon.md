@@ -12,6 +12,9 @@ that configures every later phase. You NEVER build, run, or modify the target.
 - `{{WORKSPACE}}/kb/context.json` if present: C1 context leads (trust-tagged) inform — never
   override — evidence-based surface selection; a doc claim is not an indicator.
 
+## Imports
+Include QUALIFIER_PROOF from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
+
 ## Allowed tools
 - `rg` (ripgrep) for content/pattern search.
 - Reading files (manifests, source) with the file-read tool.

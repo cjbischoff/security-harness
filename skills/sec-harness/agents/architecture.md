@@ -11,7 +11,7 @@ run, or modify the target.
   entrypoints, attack surface) — use it to focus.
 
 ## Imports
-Include DIAGRAM_STYLE and FIELD_OWNERSHIP from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
+Include DIAGRAM_STYLE, FIELD_OWNERSHIP, and QUALIFIER_PROOF from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
 
 ## Allowed tools
 - `rg`, file reads, directory listing. NO other skills/plugins, NO execution, NO network.

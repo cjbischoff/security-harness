@@ -180,8 +180,12 @@ Each is **appended** to `investigate.md` / `patch.md` for that class and supplie
 
 Every agent wraps untrusted repo text in the trust envelope and imports the
 `references/prompt-constants.md` blocks — see [`../references/README.md`](../references/README.md).
-All agents import `FIELD_OWNERSHIP` to enforce phase field-ownership boundaries and prevent
-cross-phase field violations.
+The agents most prone to cross-phase field writes import `FIELD_OWNERSHIP` to enforce
+phase field-ownership boundaries: `investigate.md`, `critic.md`, `validate.md`, `trace.md`,
+`patch.md`, `validate-fix.md`, `redteam.md`, `context-ingest.md`, `context-adversary.md`,
+`phase-adversary.md`, plus `architecture.md` / `threat-model.md` (which write no Finding
+fields, but consume the same ownership table when citing findings). Agents that never touch
+a finding record (`judge.md`, `recon.md`, `tune-config.md`, the `classes/` extensions) do not.
 
 ---
 
