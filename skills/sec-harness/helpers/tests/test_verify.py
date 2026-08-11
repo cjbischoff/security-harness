@@ -160,3 +160,70 @@ def test_verify_matches_specific_rule_not_whole_class(monkeypatch):
     out = V.verify_patch("t", "diff", "cfg", "Crypter.php", "crypto",
                          ["semgrep:php.mcrypt-use", "structural-index:callers"])
     assert out == "verified-static"  # the finding's own rule cleared
+
+
+def test_deps_finding_with_placeholder_version_stays_not_fixed(tmp_path):
+    # A patch_diff that bumps go.mod to a literal placeholder (not a real version)
+    # must never be credited as fixed, even if the OSV/SCA re-scan no longer flags
+    # the old (now-missing) version string.
+    (tmp_path / "go.mod").write_text(
+        "module x\n\nrequire golang.org/x/crypto v0.51.0\n"
+    )
+    patch = (
+        "--- a/go.mod\n+++ b/go.mod\n@@ -1,3 +1,3 @@\n"
+        " module x\n \n-require golang.org/x/crypto v0.51.0\n"
+        "+require golang.org/x/crypto vX.Y.Z\n"
+    )
+    result = verify_patch(str(tmp_path), patch, "rules/smoke.yaml", "go.mod", "deps",
+                           evidence_sources=["sca:osv:GHSA-5cgq-3rg8-m6cv"])
+    assert result == "not-fixed"
+
+
+def test_deps_finding_with_real_version_bump_can_verify(tmp_path, monkeypatch):
+    # A real semver bump is allowed to proceed to the normal SCA re-scan check
+    # (this test stubs the re-scan to report the old signal is gone, since we're
+    # only testing that a REAL version string doesn't get short-circuited to
+    # not-fixed the way a placeholder does).
+    (tmp_path / "go.mod").write_text(
+        "module x\n\nrequire golang.org/x/crypto v0.51.0\n"
+    )
+    patch = (
+        "--- a/go.mod\n+++ b/go.mod\n@@ -1,3 +1,3 @@\n"
+        " module x\n \n-require golang.org/x/crypto v0.51.0\n"
+        "+require golang.org/x/crypto v0.52.0\n"
+    )
+
+    state = {"pre": True}
+
+    def fake_hit(target, config, basename, cls, rules, **kw):
+        # first call = pre-patch (signal present), second = post-patch (gone)
+        was_pre = state["pre"]
+        state["pre"] = False
+        return was_pre
+
+    monkeypatch.setattr("sec_harness.verify._file_has_hit", fake_hit)
+    result = verify_patch(str(tmp_path), patch, "rules/smoke.yaml", "go.mod", "deps",
+                           evidence_sources=["sca:osv:GHSA-5cgq-3rg8-m6cv"])
+    assert result == "verified-static"
+
+
+def test_verify_findings_does_not_override_validate_fix_not_fixed_verdict(tmp_path):
+    ws = Workspace(tmp_path)
+    ws.ensure()
+    f = Finding(
+        id="F-0001", rule_id="r", cls="deps", status=FindingStatus.CONFIRMED,
+        severity=Severity.CRITICAL, file="go.mod", line=1, message="m",
+        patch_diff="--- a/go.mod\n+++ b/go.mod\n@@ -1 +1 @@\n-x\n+y\n",
+        evidence_sources=["sca:osv:GHSA-test"],
+        history=[{"event": "validate-fix:not_fixed", "reason": "placeholder version"}],
+    )
+    write_findings(ws, [f])
+
+    def always_verified(*a, **kw):
+        return "verified-static"
+
+    fixed_count = verify_findings(ws, str(tmp_path), "rules/smoke.yaml", verifier=always_verified)
+    assert fixed_count == 0
+    reloaded = read_findings(ws)[0]
+    assert reloaded.status is FindingStatus.CONFIRMED  # NOT promoted to fixed
+    assert any(h.get("event") == "verify:conflict" for h in reloaded.history)

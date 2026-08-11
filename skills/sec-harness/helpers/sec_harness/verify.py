@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -188,6 +189,36 @@ def _check(
     )
 
 
+_PLACEHOLDER_VERSION_RE = re.compile(r"\bv?[XYZ]\.[XYZ]\.[XYZ]\b", re.IGNORECASE)
+
+
+def _placeholder_version_bump(patch_diff: str) -> bool:
+    """True if an added diff line contains an obviously non-functional version
+    placeholder (e.g. ``vX.Y.Z``) instead of a real version number.
+
+    A patch that bumps a dependency to a literal template string will never
+    build; crediting it as "fixed" because the old vulnerable version string
+    is no longer text-matched by the SCA re-scan is a false clean. This is a
+    narrow, deliberately conservative heuristic — it only catches the
+    X/Y/Z-placeholder shape, not every possible non-functional diff.
+
+    Args:
+        patch_diff: The unified diff text.
+
+    Returns:
+        True if any added line (``+`` prefix, not ``+++``) matches the
+        placeholder-version pattern.
+    """
+    for line in patch_diff.splitlines():
+        if (
+            line.startswith("+")
+            and not line.startswith("+++")
+            and _PLACEHOLDER_VERSION_RE.search(line)
+        ):
+            return True
+    return False
+
+
 def verify_patch(
     target: str, patch_diff: str, config: str, file: str, cls: str,
     evidence_sources: list[str] | None = None,
@@ -229,6 +260,8 @@ def verify_patch(
         shutil.copytree(target, repo, ignore=_copy_ignore)
         if not apply_patch(repo, patch_diff):
             return "static-only"
+        if cls == "deps" and _placeholder_version_bump(patch_diff):
+            return "not-fixed"
         post = _check(str(repo), config, basename, cls, rules, backend, language, db_dir)
         if post is None:
             return "static-only"
@@ -263,10 +296,27 @@ def verify_findings(
     for f in findings:
         if f.status is not FindingStatus.CONFIRMED or not f.patch_diff:
             continue
+        last_validate_fix = next(
+            (h for h in reversed(f.history) if str(h.get("event", "")).startswith("validate-fix:")),
+            None,
+        )
+        validate_fix_said_not_fixed = (
+            last_validate_fix is not None
+            and last_validate_fix.get("event") != "validate-fix:fixed"
+        )
         result = verifier(
             target, f.patch_diff, config, f.file, f.cls, f.evidence_sources,
             language=language, db_dir=db_dir,
         )
+        if result == "verified-static" and validate_fix_said_not_fixed:
+            f.history.append({
+                "event": "verify:conflict",
+                "reason": ("deterministic re-scan found the signal gone, but validate-fix "
+                           f"explicitly said {last_validate_fix.get('event')!r} — leaving "
+                           "status/verification as validate-fix left them for human review"),
+            })
+            changed = True
+            continue
         f.verification = result
         changed = True
         if result == "verified-static":
