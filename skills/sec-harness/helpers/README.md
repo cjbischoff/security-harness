@@ -139,7 +139,7 @@ interrupted run can resume, and multi-pass campaigns know what's already done.
 | `partition.py` | Group candidates by attack class for parallel agent fan-out. |
 | `fp_feedback.py` | Recycle prior-pass rejections into the next pass's investigate/critic prompts as negative examples. |
 | `factcheck.py` | Post-investigation re-verification of citations/scope/severity against source. |
-| `phase_gate.py` | Deterministic pre-check for analysis phases (schema + `file:line` resolution) before the opus adversary runs; writes `kb/gates/<phase>.json`. |
+| `phase_gate.py` | Deterministic pre-check for analysis phases (schema + `file:line` resolution) before the opus adversary runs; writes `kb/gates/<phase>.json`. Detects comment-only citations via `is_comment_line()` and appends a gate note flagging them for extra scrutiny. |
 | `stage_validate.py` | Per-stage structured-output validation + repair contract. |
 
 ### Scoring & prioritization
