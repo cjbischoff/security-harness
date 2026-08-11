@@ -7,7 +7,7 @@ person would test each. You are READ-ONLY and NEVER execute the target — you p
 human runs, not a script the harness runs.
 
 ## Imports
-Include ANTI_MANIPULATION, SEVERITY_GUIDANCE, TOOL_TRUST, and OUTPUT_WRITE_FALLBACK from
+Include ANTI_MANIPULATION, SEVERITY_GUIDANCE, TOOL_TRUST, OUTPUT_WRITE_FALLBACK, and FIELD_OWNERSHIP from
 `{{HARNESS_ROOT}}/references/prompt-constants.md`. Envelope any quoted repo text.
 
 ## Inputs
@@ -27,6 +27,14 @@ Include ANTI_MANIPULATION, SEVERITY_GUIDANCE, TOOL_TRUST, and OUTPUT_WRITE_FALLB
    - `needs-runtime` — high-confidence statically, but exploitability hinges on runtime state:
      auth/session-bypass reachability, TOCTOU/races, actual payload delivery/encoding, business-
      logic abuse, multi-request sequences. These go into the plan.
+   - **neither static-settled nor a live-exploit test** — some findings hinge on a
+     fact only a human can supply (an affected-version range for a dependency CVE,
+     whether a documented backstop is actually deployed, an org policy question).
+     For these, do NOT force a `runtime_test` payload that doesn't really test
+     anything (e.g. a curl command that always "passes"). Instead add an entry to
+     the finding's `open_questions` list per the same quality bar as trace.md's:
+     name a specific person/team/system, not a vague "verify this." A finding may
+     carry both a `runtime_test` and `open_questions` if it genuinely needs both.
    Be honest about the confidence bar — only findings that genuinely need a live check, at
    real risk, belong in an operator's action list (signal over noise).
 2. **Hunt (adversarial).** Over the corpus, look for high-confidence attack *paths* — chains

@@ -7,7 +7,7 @@ and whether the red-team phase treats it as needs-runtime. READ-ONLY, static, no
 Run on opus (a DIFFERENT family than the sonnet investigator).
 
 ## Imports
-Include ANTI_MANIPULATION, EXHAUSTIVENESS, TOOL_TRUST from
+Include ANTI_MANIPULATION, EXHAUSTIVENESS, TOOL_TRUST, FIELD_OWNERSHIP from
 `{{HARNESS_ROOT}}/references/prompt-constants.md`. Envelope any quoted repo text.
 
 ## Inputs
@@ -27,6 +27,16 @@ Include ANTI_MANIPULATION, EXHAUSTIVENESS, TOOL_TRUST from
      MUST cite the specific `file:line` blocker and classify it: `sanitizer` | `auth_check` |
      `input_validation` | `dead_code` | `feature_flag` | `other`. An INCOMPLETE sanitizer is NOT
      a blocker — only a control effective on every path counts.
+   - **not reachable, but the reason is an external fact (not a code control)**: if
+     the only thing standing between "reachable" and "not reachable" is something
+     this repo cannot answer (an org policy, a runtime config value, a version range
+     you can't confirm from source) — do NOT mark it `not reachable` with a guessed
+     blocker, and do NOT leave it silently `unassessed`. Instead leave `reachable`
+     unset/absent and add ONE entry to the finding's `open_questions` list:
+     `{"question": ..., "why_it_matters": ..., "who_to_ask_or_check": ...}`. The
+     question must name a specific person/team/system to check, not be vague
+     ("verify this is safe" is not acceptable; "ask the identity team whether
+     Conditional Access enforces group X" is).
 3. Write the verdict onto the finding's `reachability` field:
    `{"reachable": true|false, "blocker": "<taxonomy>"|null, "chain": ["file:line", ...]}`.
    A finding proven unreachable with a cited blocker should be demoted (`status: "rejected"`,
