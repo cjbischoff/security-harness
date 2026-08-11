@@ -112,3 +112,34 @@ def test_informational_status_roundtrips_and_is_terminal():
     assert d["status"] == "informational"
     assert Finding.from_dict(d).status is FindingStatus.INFORMATIONAL
     assert FindingStatus.INFORMATIONAL in TERMINAL_STATUSES
+
+
+def test_open_questions_field_roundtrips_and_defaults_empty():
+    f = Finding(
+        id="F-0099", rule_id="r", cls="authz", status=FindingStatus.CONFIRMED,
+        severity=Severity.HIGH, file="a.go", line=1, message="m",
+    )
+    assert f.open_questions == []
+
+    f.open_questions = [{
+        "question": "Is there an Azure AD group-membership check enforced "
+                     "anywhere outside this repo for the /mcp user path?",
+        "why_it_matters": "AUTHZ-0001 assumes no such check exists anywhere; "
+                           "if one exists outside the repo, severity is overstated.",
+        "who_to_ask_or_check": "identity/security-platform team; check Conditional "
+                                "Access policies in the Azure AD tenant admin console.",
+    }]
+    d = f.to_dict()
+    assert d["open_questions"][0]["question"].startswith("Is there an Azure AD")
+    round_tripped = Finding.from_dict(d)
+    assert round_tripped.open_questions == f.open_questions
+
+
+def test_open_questions_backcompat_missing_key_defaults_empty():
+    # A finding written before this field existed loads with an empty list, not a crash.
+    old = Finding(
+        id="F-0001", rule_id="r", cls="sqli", status=FindingStatus.RAW,
+        severity=Severity.MEDIUM, file="a.py", line=1, message="m",
+    ).to_dict()
+    del old["open_questions"]
+    assert Finding.from_dict(old).open_questions == []
