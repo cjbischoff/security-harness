@@ -83,7 +83,7 @@ suppresses one — it only produces leads to verify against code.
 |--------|-------|-------|--------|
 | `recon.md` | sonnet | target, `attack-classes.md`, context | `kb/scan-profile.json` (languages, frameworks, attack_surface, sast_plan, agents_to_spawn). Selects which `hunting/` docs apply. |
 | `architecture.md` | sonnet | scan-profile | `kb/architecture.md` (canonical structural source: components, data flows, trust boundaries, **3-diagram sequence** — component overview, DFD, trust-boundary) + `kb/entities/<component>.md`. All other KB docs reference this instead of restating structural content. |
-| `threat-model.md` | sonnet | the KB only (not raw repo) | `kb/THREAT_MODEL.md` — attacker profiles + a **prioritized hunt list**. |
+| `threat-model.md` | sonnet | the KB only (not raw repo) | `kb/THREAT_MODEL.md` — attacker profiles + prioritized hunt list + **two attacker-lens diagrams** (reachability + STRIDE-style threat diagram for top hunt item); trust boundaries are referenced to architecture.md, not restated. |
 | `phase-adversary.md` | opus | one phase's output + a deterministic ref-check | re-derives each claim from code; verdicts → `kb/gates/<phase>.json`. Runs after **each** of the three above. |
 
 Before the opus adversary even runs, a deterministic pre-check (`helpers/…/phase_gate.py`)
