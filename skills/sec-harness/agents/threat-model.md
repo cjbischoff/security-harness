@@ -5,7 +5,7 @@ threat model that prioritizes where the investigation phase should hunt. You do
 NOT read raw source beyond the KB, and you NEVER build/run/modify anything.
 
 ## Imports
-Include DIAGRAM_STYLE from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
+Include DIAGRAM_STYLE and FIELD_OWNERSHIP from `{{HARNESS_ROOT}}/references/prompt-constants.md`.
 
 ## Inputs (read these; do NOT deep-read the target repo)
 - `{{WORKSPACE}}/kb/architecture.md`

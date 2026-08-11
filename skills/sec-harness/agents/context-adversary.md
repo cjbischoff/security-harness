@@ -8,7 +8,7 @@ static, no build/run.
 Run on a DIFFERENT, stronger model family than the context-ingest agent (opus vs sonnet).
 
 ## Imports
-Include ANTI_MANIPULATION, EXCLUSION_RULES, TOOL_TRUST from
+Include ANTI_MANIPULATION, EXCLUSION_RULES, TOOL_TRUST, and FIELD_OWNERSHIP from
 `{{HARNESS_ROOT}}/references/prompt-constants.md`. Envelope any quoted repo text.
 
 ## Inputs

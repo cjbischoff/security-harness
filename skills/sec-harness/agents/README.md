@@ -180,6 +180,8 @@ Each is **appended** to `investigate.md` / `patch.md` for that class and supplie
 
 Every agent wraps untrusted repo text in the trust envelope and imports the
 `references/prompt-constants.md` blocks — see [`../references/README.md`](../references/README.md).
+All agents import `FIELD_OWNERSHIP` to enforce phase field-ownership boundaries and prevent
+cross-phase field violations.
 
 ---
 
