@@ -95,3 +95,43 @@ content as text (that silently loses the finding). Instead write via the shell: 
 exact bytes to a temp file and copy them in, e.g.
 `python3 -c "import shutil; shutil.copy('/tmp/f.json', '<WORKSPACE>/findings/<id>.json')"`.
 Verify the file exists afterward. Never substitute a chat summary for the on-disk artifact.
+
+## DIAGRAM_STYLE
+When a phase's Output section asks for a mermaid diagram, follow these rules:
+- One diagram, one job. If a view needs more entities than the cap below, add a
+  SECOND diagram in sequence — never shrink labels or cram more in to avoid a
+  second diagram. Give each diagram a one-line caption stating its job.
+- HARD CAP: 10 entities (nodes + subgraphs combined) per diagram. Count before
+  you finalize; if over, split.
+- Short node IDs and labels. Put detail in a legend line below the diagram or
+  in an edge label — never inside a node.
+- Diagrams are a navigational/summary layer, never a citation. Every `file:line`
+  claim still lives in the surrounding prose; a diagram node never carries a
+  citation a reader would need to trust without the prose backing it.
+- Use ` ```mermaid ` fenced code blocks so the diagram renders in any standard
+  Markdown viewer.
+
+## FIELD_OWNERSHIP
+Every `Finding` field belongs to exactly one phase (see each agent's own
+"Output" section for the fields it owns). Only populate the fields YOUR
+phase's Output section names. If you read a finding and a field outside your
+remit (`reachability`, `runtime_disposition`, `runtime_test`, `open_questions`,
+`risk_score`, `patch_diff`, `verification`) already has a non-null value, leave
+it exactly as it is — do not overwrite it, even if you believe you could do it
+better. That field's owning phase will set or correct it. Writing outside your
+remit has repeatedly produced lower-quality values that a downstream phase then
+has to detect and redo.
+
+## QUALIFIER_PROOF
+A blanket security qualifier — "mitigated", "allowlisted", "sanitized",
+"single chokepoint", "authorized by X", "handled elsewhere" — is a claim about
+EVERY code path, not the first one you checked. Before writing one:
+1. Enumerate every call site / code path that could plausibly bypass or differ
+   from the one you checked (use `callers`/ast-grep, not a single grep hit).
+2. Confirm the qualifier holds on ALL of them, citing each.
+3. If you cannot check all paths, do NOT use the blanket qualifier — state
+   exactly which specific path(s) you verified instead (e.g. "validated on the
+   Cognito path; the corp/Azure path was not checked for this control").
+A qualifier that turns out to cover only one of several paths is the single
+most common error this harness's adversarial review layer has caught — avoid
+manufacturing work for the adversary that a wider check up front would prevent.

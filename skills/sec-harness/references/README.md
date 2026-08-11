@@ -34,7 +34,7 @@ answers. `references/` kills that drift two ways:
 ```mermaid
 flowchart LR
     subgraph REF["references/"]
-        PC["prompt-constants.md<br/>(9 verbatim blocks)"]
+        PC["prompt-constants.md<br/>(12 verbatim blocks)"]
         AC["attack-classes.md"]
         FT["finding-template.md"]
         HUNT["hunting/*.md"]
@@ -81,8 +81,8 @@ flowchart LR
 
 ### Prompt text — injected into agents
 
-#### `prompt-constants.md` — the constitution (9 blocks, pasted into every agent)
-The single most load-bearing file here. Nine named blocks are copied **verbatim** into the
+#### `prompt-constants.md` — the constitution (12 blocks, pasted into every agent)
+The single most load-bearing file here. Twelve named blocks are copied **verbatim** into the
 top of every agent prompt (agents reference it via the `{{HARNESS_ROOT}}` path token). If
 you change a word here, every agent's behaviour changes.
 
@@ -97,9 +97,12 @@ you change a word here, every agent's behaviour changes.
 | `TOOL_TRUST` | Mechanical receipts (Read / ast-grep / structural-index / semgrep …) outrank `llm-claimed` reasoning. Bytes read through a piped shell are **not** trustworthy for exact-content claims. |
 | `PATH_BASE` | Every file citation is repo-root-relative (relative to `{{REPO_ROOT}}`), never a bare basename. |
 | `OUTPUT_WRITE_FALLBACK` | If a host blocks the agent's Write tool on a findings/report path, write via a `python3 shutil.copy` from a temp file instead — so a blocked write never silently drops a finding. |
+| `DIAGRAM_STYLE` | When emitting a mermaid diagram, enforce the 10-entity hard cap per diagram, one diagram per job. Short node IDs with detail in legend/edges. Diagrams are navigational; `file:line` claims live in prose, not diagram nodes. |
+| `FIELD_OWNERSHIP` | Each `Finding` field is owned by exactly one phase. Only populate your phase's Output fields; never overwrite downstream phase fields (e.g. `risk_score`, `patch_diff`). |
+| `QUALIFIER_PROOF` | A blanket security claim ("mitigated", "sanitized", "handled elsewhere") is a claim about *every* code path. Enumerate all reachable paths and confirm the qualifier on each, or state which specific paths you verified. |
 
-> **Note:** the skill's older `CLAUDE.md` referred to "six verbatim blocks." That was stale
-> — there are **nine**. The table above is authoritative; regenerate it if you add a block.
+> **Note:** the table above is authoritative. If you add or remove a block, update the count
+> in the Mermaid diagram, the section header, and this table.
 
 **Consumed by:** every prompt in [`../agents/`](../agents/); the `repo-root-relative`
 invariant is regression-tested by `helpers/tests/test_docs_invariants.py`.
